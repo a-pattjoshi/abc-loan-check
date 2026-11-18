@@ -9,11 +9,13 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+ROOT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT_DIR))
 
 import streamlit as st  # noqa: E402
 
 import amounts  # noqa: E402
+import explain as explain_page  # noqa: E402
 import config as C  # noqa: E402
 import logger  # noqa: E402
 import lookups  # noqa: E402
@@ -21,6 +23,8 @@ import predict  # noqa: E402
 import wording  # noqa: E402
 
 st.set_page_config(page_title="ABC Credit loan check", page_icon="🛵", layout="centered")
+st.markdown("<style>#MainMenu{visibility:hidden}footer{visibility:hidden}[data-testid='stToolbar']{display:none}"
+            "[data-testid='stAppDeployButton']{display:none}[data-testid='stDecoration']{display:none}</style>", unsafe_allow_html=True)
 
 
 def inr(x) -> str:
@@ -57,9 +61,9 @@ TEXT_STEPS = {"name": "Your name (optional)", "pin": "e.g. 560001", "price": "e.
 DOCS = {
     "SAL": "last 3 salary slips and 6 months of bank statements",
     "SEP": "latest income tax return and 6 months of bank statements",
-    "NPP": "latest income tax return or business proof and 6 months of bank statements",
+    "NPP": "appointment or probation letter, latest salary slips and 6 months of bank statements",
     "AGR": "land records and 6 months of bank statements",
-    "NREGI": "job card or work proof and 6 months of bank statements",
+    "NREGI": "proof of your income sources and 6 months of bank statements",
     "PEN": "pension slip and 6 months of bank statements",
     "STU": "admission proof and the income documents of your co-applicant",
     "NONEARNMEM": "income documents of the earning family member who applies with you",
@@ -277,14 +281,29 @@ def score_upload(data: bytes):
 def render_upload():
     st.title("🛵 ABC Credit batch scoring")
     st.caption("Upload a CSV in the training-file layout. Each row gets APPROVED or DECLINED from the same model as the chat.")
+    sample = ROOT_DIR / "sample_loan_applications.csv"
+    if not sample.exists():
+        sample = ROOT_DIR.parent / "reports" / "sample_loan_applications.csv"
+    sample_bytes = sample.read_bytes() if sample.exists() else b""
+    c1, c2 = st.columns(2)
+    if sample_bytes:
+        c1.download_button("Download a sample file", sample_bytes, file_name="sample_loan_applications.csv", mime="text/csv",
+                           help="25 invented applicants: some clear approvals, some declines, and a few messy or out-of-policy rows.")
+    use_sample = c2.toggle("Score the sample file now", value=False, disabled=not sample_bytes)
     f = st.file_uploader("CSV file", type=["csv", "txt"])
-    if f is None:
+    if use_sample and f is None:
+        data = sample_bytes
+    elif f is not None:
+        data = f.getvalue()
+    else:
+        data = None
+    if data is None:
         st.info("Columns the model reads: Pincode, Make_Code, Product_Code, Model_Variant, LTV, Loan_Amount, Employment_Type, "
                 "Net_salary, Age, PAST_LOANS_ACTIVE. Extra columns are ignored. Missing ones are filled with typical values and flagged. "
                 "LTV must be a percentage (80, not 0.8).")
         return
     try:
-        res, info = score_upload(f.getvalue())
+        res, info = score_upload(data)
     except predict.FileFormatError as e:
         st.error(str(e))
         return
@@ -308,14 +327,18 @@ def render_upload():
     keep = {"Decision and probability": ["ID", "Decision", "P_DECLINED"], "Decision only": ["ID", "Decision"],
             "Probability only": ["ID", "P_DECLINED"]}[cols] + ["policy_age_ok"]
     out = res[keep]
-    st.dataframe(out.head(50), use_container_width=True, hide_index=True)
+    st.dataframe(out.head(50), width="stretch", hide_index=True)
     if len(out) > 50:
         st.caption(f"Showing the first 50 of {len(out):,} rows. The download has all rows.")
     st.download_button("Download predictions (CSV)", out.to_csv(index=False).encode(), file_name="predictions.csv", mime="text/csv")
 
 
-if st.sidebar.radio("Mode", ["Loan check", "Score a file"], key="mode") == "Score a file":
+_mode = st.sidebar.radio("Mode", ["Loan check", "Score a file", "How it works"], key="mode")
+if _mode == "Score a file":
     render_upload()
+    st.stop()
+if _mode == "How it works":
+    explain_page.render()
     st.stop()
 
 # ---------------------------------------------------------------- page
@@ -335,10 +358,10 @@ lk = get_lookups()
 if step == "consent":
     with st.chat_message("assistant"):
         c1, c2 = st.columns(2)
-        if c1.button("I agree", use_container_width=True):
+        if c1.button("I agree", width="stretch"):
             handle_choice("consent", True, "I agree")
             st.rerun()
-        if c2.button("No, thanks", use_container_width=True):
+        if c2.button("No, thanks", width="stretch"):
             handle_choice("consent", False, "No, thanks")
             st.rerun()
 elif step in TEXT_STEPS:
@@ -372,10 +395,10 @@ elif step == "emp":
 elif step == "act":
     with st.chat_message("assistant"):
         c1, c2 = st.columns(2)
-        if c1.button("Yes, I have an active loan", use_container_width=True):
+        if c1.button("Yes, I have an active loan", width="stretch"):
             handle_choice("act", True, "Yes")
             st.rerun()
-        if c2.button("No active loan", use_container_width=True):
+        if c2.button("No active loan", width="stretch"):
             handle_choice("act", False, "No")
             st.rerun()
 elif step == "no_consent":

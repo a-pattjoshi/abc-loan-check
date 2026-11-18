@@ -47,9 +47,9 @@ MIN_LOAN = 10_000
 USE_LLM = False
 GROQ_MODEL = "llama-3.3-70b-versatile"  # AP can change; model name lives only here
 
-EMPLOYMENT_LABELS = {  # code -> label shown to the user (labels for NPP, NREGI to confirm with AP)
-    "SAL": "Salaried", "SEP": "Self-employed professional", "NPP": "Self-employed, non-professional",
-    "AGR": "Agriculture / farming", "NREGI": "Daily-wage / rural scheme worker", "PEN": "Pensioner",
+EMPLOYMENT_LABELS = {  # code -> label shown to the user (meanings from the project brief, section 5)
+    "SAL": "Salaried", "SEP": "Self-employed", "NPP": "Non-permanent probationary",
+    "AGR": "Agriculture / farming", "NREGI": "Non-regular income", "PEN": "Pensioner",
     "STU": "Student", "NONEARNMEM": "Non-earning family member",
 }
 NO_INCOME_TYPES = ("STU", "NONEARNMEM")  # skip the income question, income = 0

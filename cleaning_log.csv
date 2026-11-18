@@ -1,0 +1,11 @@
+issue,rows_affected,action
+1 empty row,1,dropped
+2 blank fields,81,"kept, missing_any flag added, impute in pipeline"
+3 Age > 60,1105,"kept (D4), policy gate in chatbot"
+4 LTV = 0,65,"set to missing, ltv_was_zero flag, impute in pipeline"
+5 Net_salary = 0,626,"kept, no_income flag added"
+6 salary outliers,420,"above p99.5 (100,000); cap + log in Phase 2"
+7 mojibake,5028,fixed to '-' (D5)
+8 variant spelling,0,"normalised; Model_Variant 21 -> 20, Model_Description 87 -> 87 unique"
+9 duplicates,12,dropped (kept first)
+9 conflicting duplicates,5,"dropped all rows of the pair (D6), only rows without blanks (D7), listed in log"

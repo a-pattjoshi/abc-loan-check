@@ -1,0 +1,4 @@
+r (loss:margin),threshold,declined_share,recall_declined,precision_declined,cost_per_1000,approve_all_cost_per_1000,decline_all_cost_per_1000
+5,0.179,0.0444,0.2021,0.2392,243.4044,262.73,947.454
+10,0.089,0.1875,0.5324,0.1492,405.2165,525.4601,947.454
+20,0.05,0.3702,0.7608,0.108,581.6037,1050.9202,947.454

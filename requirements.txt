@@ -1,0 +1,7 @@
+# Runtime packages only, for hosting the Streamlit app (same pinned versions as requirements.txt, so model.joblib loads).
+# On Streamlit Community Cloud, copy this file's lines into a requirements.txt in the repo root and choose Python 3.12.
+joblib==1.6.0
+numpy==2.5.4
+pandas==3.1.0
+scikit-learn==1.9.1
+streamlit==1.66.1

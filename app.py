@@ -1,0 +1,389 @@
+"""ABC Credit two-wheeler loan check: 7 questions, one decision.
+
+Run:  .venv/bin/streamlit run src/app.py
+The decision comes only from the trained model (predict.score). The age rule is a policy gate that
+runs first. The optional wording layer (wording.py) only rephrases the explanation text.
+"""
+import math
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import streamlit as st  # noqa: E402
+
+import amounts  # noqa: E402
+import config as C  # noqa: E402
+import logger  # noqa: E402
+import lookups  # noqa: E402
+import predict  # noqa: E402
+import wording  # noqa: E402
+
+st.set_page_config(page_title="ABC Credit loan check", page_icon="🛵", layout="centered")
+
+
+def inr(x) -> str:
+    """Rupees with Indian digit grouping (12,34,567)."""
+    s = f"{int(round(x))}"
+    if len(s) <= 3:
+        return "₹" + s
+    head, tail = s[:-3], s[-3:]
+    head = re.sub(r"(\d)(?=(\d\d)+$)", r"\1,", head)
+    return f"₹{head},{tail}"
+
+
+def parse_number(text: str):
+    return amounts.parse_amount(text)
+
+
+CONSENT_TEXT = ("Before we start: I use your answers only to check this loan and to keep a masked record of the chat "
+                "(pincode shortened, income as a band). Your name and phone are optional and are stored only as one-way hashes, "
+                "never as typed. Do you agree?")
+
+QUESTIONS = {
+    "name": "Optional: what name should I note? You can skip this. It does not affect the result.",
+    "pin": "**Question 1 of 7.** What is your 6-digit pincode?",
+    "veh": "**Question 2 of 7.** Which vehicle do you want to buy? Pick the make, then the model.",
+    "price": "**Question 3 of 7.** What is the on-road price of the vehicle, in rupees?",
+    "loan": "Still question 3. How much loan do you want, in rupees?",
+    "emp": "**Question 4 of 7.** What is your employment type?",
+    "inc": "**Question 5 of 7.** What is your monthly income, in rupees?",
+    "age": "**Question 6 of 7.** What is your age in years?",
+    "act": "**Question 7 of 7.** Do you have any active loan right now?",
+}
+TEXT_STEPS = {"name": "Your name (optional)", "pin": "e.g. 560001", "price": "e.g. 95000", "loan": "e.g. 70000", "inc": "e.g. 25000", "age": "e.g. 32"}
+
+DOCS = {
+    "SAL": "last 3 salary slips and 6 months of bank statements",
+    "SEP": "latest income tax return and 6 months of bank statements",
+    "NPP": "latest income tax return or business proof and 6 months of bank statements",
+    "AGR": "land records and 6 months of bank statements",
+    "NREGI": "job card or work proof and 6 months of bank statements",
+    "PEN": "pension slip and 6 months of bank statements",
+    "STU": "admission proof and the income documents of your co-applicant",
+    "NONEARNMEM": "income documents of the earning family member who applies with you",
+}
+
+
+@st.cache_resource
+def get_lookups():
+    return lookups.load()
+
+
+def reset():
+    for k in list(st.session_state.keys()):  # keep the sidebar mode choice; clear() would wipe it
+        if k != "mode":
+            del st.session_state[k]
+    st.session_state.sid = logger.start_session()
+    st.session_state.hold = False
+    st.session_state.pending = []
+    st.session_state.step = "consent"
+    st.session_state.phone_saved = False
+    st.session_state.a = {}
+    st.session_state.msgs = [("assistant", "Hi, I am the ABC Credit loan assistant. I will ask 7 short questions "
+                                           "(about 2 to 3 minutes) and then tell you if your two-wheeler loan is likely to be approved."),
+                             ("assistant", CONSENT_TEXT)]
+    st.session_state.result = None
+    for _, t in st.session_state.msgs:
+        logger.log_turn(st.session_state.sid, "intro", "assistant", t)
+
+
+def say(role, text, log=True):
+    st.session_state.msgs.append((role, text))
+    if not log:
+        return
+    if st.session_state.hold:  # keep the user's answer ahead of the next question in the log
+        st.session_state.pending.append((role, text))
+    else:
+        logger.log_turn(st.session_state.sid, st.session_state.step, role, text)
+
+
+def go(step):
+    st.session_state.step = step
+    if step in QUESTIONS:
+        q = QUESTIONS[step]
+        if step == "loan":
+            q += f" (up to {inr(st.session_state.a['price'])})"
+        say("assistant", q)
+
+
+def finish():
+    a = st.session_state.a
+    st.session_state.step = "done"
+    st.session_state.result = predict.score(a)
+    logger.finish_session(st.session_state.sid, st.session_state.result)
+
+
+def handle_text(step, raw):
+    """Run the step, then log the masked answer followed by anything the bot said."""
+    st.session_state.hold, st.session_state.pending = True, []
+    _handle_text(step, raw)
+    st.session_state.hold = False
+    ok = st.session_state.step != step
+    logger.log_turn(st.session_state.sid, step, "user", logger.mask_answer(step, raw, ok), valid=ok)
+    for role, text in st.session_state.pending:
+        logger.log_turn(st.session_state.sid, st.session_state.step, role, text)
+    st.session_state.pending = []
+
+
+def _handle_text(step, raw):
+    a = st.session_state.a
+    say("user", raw, log=False)
+    num = parse_number(raw)
+    err = None
+    if step == "name":
+        name = " ".join(raw.split())
+        if 2 <= len(name) <= 60 and all(ch.isalpha() or ch in " .'-" for ch in name):
+            logger.save_applicant(st.session_state.sid, name=name)
+            say("assistant", "Thanks.")
+            return go("pin")
+        err = "Please enter a name of 2 to 60 letters, or press Skip."
+    elif step == "pin":
+        pin = re.sub(r"\s", "", raw)
+        if re.fullmatch(r"[1-9]\d{5}", pin):
+            a["pincode"] = pin
+            say("assistant", "Thanks. " + (f"I found your area ({predict.derive_tier(pin)[0][3:]})." if predict.derive_tier(pin)[1] is None
+                                            else "I could not find that exact pincode, so I will use an area-level estimate."))
+            return go("veh")
+        err = "A pincode has exactly 6 digits and does not start with 0. Please try again."
+    elif step == "price":
+        lo, hi = C.PRICE_RANGE
+        if num is not None and lo <= num <= hi:
+            a["price"] = float(num)
+            return go("loan")
+        err = f"Please enter the on-road price as a number between {inr(lo)} and {inr(hi)}."
+    elif step == "loan":
+        if num is not None and C.MIN_LOAN <= num <= a["price"]:
+            a["loan"] = float(num)
+            return go("emp")
+        err = f"The loan must be a number from {inr(C.MIN_LOAN)} up to the vehicle price ({inr(a['price'])})."
+    elif step == "inc":
+        if num is not None and 1000 <= num <= C.INCOME_MAX:
+            a["income"] = float(num)
+            return go("age")
+        err = f"Please enter your monthly income as a number between {inr(1000)} and {inr(C.INCOME_MAX)}."
+    elif step == "age":
+        if num is not None and math.isfinite(num) and num == int(num) and 1 <= num <= 120:
+            a["age"] = int(num)
+            reason = predict.policy_gate(a["age"])
+            if reason:
+                st.session_state.step = "policy"
+                st.session_state.result = {"decision": "OUT_OF_POLICY", "reason": reason}
+                logger.finish_session(st.session_state.sid, st.session_state.result, status="out_of_policy")
+                return
+            return go("act")
+        err = "Please enter your age as a whole number of years."
+    say("assistant", err)
+
+
+def handle_choice(step, value, label):
+    a = st.session_state.a
+    say("user", label)
+    if step == "consent":
+        logger.log_consent(st.session_state.sid, bool(value))
+        if value:
+            return go("name")
+        st.session_state.step = "no_consent"
+        st.session_state.result = {"decision": "NO_CONSENT"}
+        logger.finish_session(st.session_state.sid, st.session_state.result, status="no_consent")
+        return say("assistant", "No problem. I have not kept your answers. You can start over any time.")
+    if step == "name":
+        return go("pin")
+    if step == "emp":
+        a["employment"] = value
+        if value in C.NO_INCOME_TYPES:
+            say("assistant", "Understood. I will skip the income question.")
+            return go("age")
+        return go("inc")
+    if step == "act":
+        a["active_loan"] = value
+        return finish()
+
+
+def explain(res, a):
+    """Plain facts about the application. Not the decision, just context from our history."""
+    ltv = res["features"]["LTV"]
+    pts = [f"Your loan covers **{ltv:.0f}%** of the vehicle price."]
+    if ltv > 90:
+        pts.append("Loans above 90% of the price were declined more often in our past data.")
+    if not a["active_loan"] and ltv > 90:
+        pts.append("A high loan share with no loan history on file was declined more often than the same share with an active loan.")
+    return " ".join(pts)
+
+
+def clean_phone(text: str):
+    """10-digit Indian mobile number or None. Accepts +91, 91 and 0 prefixes, spaces and dashes."""
+    d = re.sub(r"[\s\-()]", "", text)
+    d = re.sub(r"^(\+91|91|0)(?=\d{10}$)", "", d)
+    return d if re.fullmatch(r"[6-9]\d{9}", d) else None
+
+
+def render_phone():
+    if st.session_state.get("phone_saved"):
+        st.success("Thanks. Our staff may call you about next steps.")
+        return
+    with st.expander("Optional: ask us to call you"):
+        raw = st.text_input("Mobile number (10 digits)", key="phone_in", max_chars=20)
+        if st.button("Save number"):
+            ph = clean_phone(raw)
+            if ph is None:
+                st.error("Please enter a 10-digit mobile number.")
+            else:
+                logger.save_applicant(st.session_state.sid, phone=ph)
+                logger.log_turn(st.session_state.sid, "phone", "user", "[phone provided]")
+                st.session_state.phone_saved = True
+                st.rerun()
+
+
+def render_result():
+    res, a = st.session_state.result, st.session_state.a
+    if res["decision"] == "OUT_OF_POLICY":
+        st.error("Sorry, we cannot take this application.")
+        st.write(res["reason"] + " This is a policy rule, not a model result.")
+        return
+    if res["decision"] == "APPROVED":
+        st.success("### Likely approved")
+        st.write(wording.rephrase(explain(res, a)))
+        st.markdown("**Next steps.** Please bring: a photo ID, address proof, two passport photos, "
+                    f"and {DOCS[a['employment']]}.")
+    else:
+        st.error("### Likely declined")
+        st.write(wording.rephrase(explain(res, a)))
+        lower = predict.suggest_lower_loan(a)
+        if lower:
+            st.markdown(f"**You can try a smaller loan.** A loan of about **{inr(lower)}** "
+                        f"({100 * lower / a['price']:.0f}% of the price) is likely to be approved. "
+                        f"A bigger down payment of {inr(a['price'] - lower)} makes this possible.")
+        else:
+            st.markdown("**Next steps.** A smaller loan alone may not change this result. Ask our staff about a co-applicant "
+                        "or a different vehicle.")
+        st.markdown("You can also ask our staff about adding a co-applicant. Their details would be reviewed separately.")
+    render_phone()
+    with st.expander("How this result was made"):
+        st.write(f"Estimated decline risk: **{res['probability']:.1%}**. We decline when it is **{res['threshold']:.1%}** or more. "
+                 f"The result comes from a statistical model trained on past loan decisions, checked in {res['latency_ms']:.0f} ms. "
+                 "It is a screening result, not a final offer.")
+    st.button("Start over", on_click=reset)
+
+
+# ---------------------------------------------------------------- file scoring page
+@st.cache_data(show_spinner=False, max_entries=3)
+def score_upload(data: bytes):
+    """Score an uploaded CSV. Cached by file content so reruns do not rescore."""
+    return predict.score_frame(predict.read_any_csv(data))
+
+
+def render_upload():
+    st.title("🛵 ABC Credit batch scoring")
+    st.caption("Upload a CSV in the training-file layout. Each row gets APPROVED or DECLINED from the same model as the chat.")
+    f = st.file_uploader("CSV file", type=["csv", "txt"])
+    if f is None:
+        st.info("Columns the model reads: Pincode, Make_Code, Product_Code, Model_Variant, LTV, Loan_Amount, Employment_Type, "
+                "Net_salary, Age, PAST_LOANS_ACTIVE. Extra columns are ignored. Missing ones are filled with typical values and flagged. "
+                "LTV must be a percentage (80, not 0.8).")
+        return
+    try:
+        res, info = score_upload(f.getvalue())
+    except predict.FileFormatError as e:
+        st.error(str(e))
+        return
+    except Exception:  # never show a traceback to a user
+        st.error("This file could not be scored. Check that it is a CSV with a header row.")
+        return
+    for w in info["warnings"]:
+        st.warning(w)
+    n_dec = int((res["Decision"] == "DECLINED").sum())
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Rows", f"{info['rows']:,}")
+    c2.metric("Approved", f"{info['rows'] - n_dec:,}")
+    c3.metric("Declined", f"{n_dec:,}")
+    c4.metric("Age outside 18 to 60", f"{info['policy_age_flagged']:,}")
+    st.caption(f"Declined share {info['declined_share']:.1%}. Threshold {info['threshold']:.3f}. "
+               "Rows with age outside 18 to 60 are flagged in policy_age_ok; the label comes from the model.")
+    if "roc_auc" in info:
+        st.success(f"The file has labels ({info['labelled_rows']:,} rows). ROC-AUC {info['roc_auc']}, PR-AUC {info['pr_auc']}, "
+                   f"recall on DECLINED {info['recall_declined']:.1%}.")
+    cols = st.radio("Columns in the download", ["Decision and probability", "Decision only", "Probability only"], horizontal=True)
+    keep = {"Decision and probability": ["ID", "Decision", "P_DECLINED"], "Decision only": ["ID", "Decision"],
+            "Probability only": ["ID", "P_DECLINED"]}[cols] + ["policy_age_ok"]
+    out = res[keep]
+    st.dataframe(out.head(50), use_container_width=True, hide_index=True)
+    if len(out) > 50:
+        st.caption(f"Showing the first 50 of {len(out):,} rows. The download has all rows.")
+    st.download_button("Download predictions (CSV)", out.to_csv(index=False).encode(), file_name="predictions.csv", mime="text/csv")
+
+
+if st.sidebar.radio("Mode", ["Loan check", "Score a file"], key="mode") == "Score a file":
+    render_upload()
+    st.stop()
+
+# ---------------------------------------------------------------- page
+if "step" not in st.session_state:
+    reset()
+
+st.title("🛵 ABC Credit loan check")
+st.caption("Two-wheeler loans. 7 questions, one answer.")
+
+for role, text in st.session_state.msgs:
+    with st.chat_message(role):
+        st.markdown(text)
+
+step = st.session_state.step
+lk = get_lookups()
+
+if step == "consent":
+    with st.chat_message("assistant"):
+        c1, c2 = st.columns(2)
+        if c1.button("I agree", use_container_width=True):
+            handle_choice("consent", True, "I agree")
+            st.rerun()
+        if c2.button("No, thanks", use_container_width=True):
+            handle_choice("consent", False, "No, thanks")
+            st.rerun()
+elif step in TEXT_STEPS:
+    if step == "name":
+        with st.chat_message("assistant"):
+            if st.button("Skip"):
+                handle_choice("name", None, "Skip")
+                st.rerun()
+    raw = st.chat_input(TEXT_STEPS[step])
+    if raw:
+        handle_text(step, raw)
+        st.rerun()
+elif step == "veh":
+    with st.chat_message("assistant"):
+        makes = sorted({v["make"] for v in lk["vehicles"] if v["make"] != "MISSING"})
+        make = st.selectbox("Make", makes, format_func=lambda m: C.MAKE_LABELS.get(m, m.title()))
+        models = sorted(v["desc"] for v in lk["vehicles"] if v["make"] == make)
+        desc = st.selectbox("Model", models)
+        if st.button("Confirm vehicle"):
+            v = next(v for v in lk["vehicles"] if v["desc"] == desc)
+            st.session_state.a.update(make=v["make"], product=v["product"], variant=v["variant"])
+            say("user", f"{C.MAKE_LABELS.get(make, make.title())}: {desc}")
+            go("price")
+            st.rerun()
+elif step == "emp":
+    with st.chat_message("assistant"):
+        code = st.selectbox("Employment type", list(C.EMPLOYMENT_LABELS), format_func=C.EMPLOYMENT_LABELS.get)
+        if st.button("Confirm"):
+            handle_choice("emp", code, C.EMPLOYMENT_LABELS[code])
+            st.rerun()
+elif step == "act":
+    with st.chat_message("assistant"):
+        c1, c2 = st.columns(2)
+        if c1.button("Yes, I have an active loan", use_container_width=True):
+            handle_choice("act", True, "Yes")
+            st.rerun()
+        if c2.button("No active loan", use_container_width=True):
+            handle_choice("act", False, "No")
+            st.rerun()
+elif step == "no_consent":
+    st.button("Start over", on_click=reset)
+elif step in ("done", "policy"):
+    with st.chat_message("assistant"):
+        render_result()
+
+st.divider()
+st.caption("Results come from a trained prediction model checked against a fixed rule for age (18 to 60). "
+           "Text assistance, if switched on, only rewords the explanation and never decides.")

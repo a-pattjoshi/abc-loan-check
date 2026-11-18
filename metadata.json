@@ -1,0 +1,73 @@
+{
+  "model": "HGB plain",
+  "params": {
+    "learning_rate": 0.1,
+    "max_leaf_nodes": 15,
+    "min_samples_leaf": 200
+  },
+  "features": {
+    "pincode": {
+      "onehot": [
+        "Final_Tier"
+      ],
+      "te": [
+        "pin2",
+        "pin3"
+      ]
+    },
+    "vehicle": {
+      "onehot": [
+        "Make_Code",
+        "Product_Code",
+        "Model_Variant"
+      ]
+    },
+    "ltv": {
+      "num": [
+        "LTV",
+        "ltv_was_zero"
+      ]
+    },
+    "loan": {
+      "num": [
+        "Loan_Amount",
+        "vehicle_value",
+        "down_payment"
+      ]
+    },
+    "employment": {
+      "onehot": [
+        "Employment_Type"
+      ]
+    },
+    "income": {
+      "num": [
+        "log_salary",
+        "no_income",
+        "LTI"
+      ]
+    },
+    "age": {
+      "num": [
+        "Age"
+      ]
+    },
+    "past_loans": {
+      "onehot": [
+        "PAST_LOANS_ACTIVE"
+      ]
+    }
+  },
+  "threshold": 0.089,
+  "train_rows": 86724,
+  "holdout_metrics": {
+    "ROC_AUC": 0.7829,
+    "PR_AUC": 0.1822,
+    "PR_AUC_baseline": 0.0525,
+    "Brier": 0.0463
+  },
+  "random_state": 42,
+  "note": "Decline when P(decline) >= threshold. Threshold chosen by AP (D12) from the cost curve, r=10.",
+  "saved_at": "2026-11-01 17:00:05",
+  "cost_ratio_r": 10
+}

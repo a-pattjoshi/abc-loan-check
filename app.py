@@ -19,6 +19,7 @@ import explain as explain_page  # noqa: E402
 import config as C  # noqa: E402
 import logger  # noqa: E402
 import lookups  # noqa: E402
+import pincode as pin_check  # noqa: E402
 import predict  # noqa: E402
 import wording  # noqa: E402
 
@@ -48,7 +49,7 @@ CONSENT_TEXT = ("Before we start: I use your answers only to check this loan and
 QUESTIONS = {
     "name": "First, what should I call you? This is optional and it does not affect your result, so feel free to skip.",
     "pin": "**Question 1 of 7.** Great. Which area do you live in? Please share your 6-digit pincode.",
-    "veh": "**Question 2 of 7.** Nice. Which vehicle are you planning to buy? Pick the make, then the model. If yours is not on the list, choose \"My vehicle is not listed\".",
+    "veh": "**Question 2 of 7.** Nice. Which two-wheeler are you planning to buy? Pick the range (for example Apache or Jupiter), then the variant. If yours is not on the list, choose \"My vehicle is not listed\".",
     "price": "**Question 3 of 7.** What is the on-road price of the vehicle (the final price you pay, in rupees)?",
     "loan": "Still question 3. How much of that would you like to borrow, in rupees?",
     "emp": "**Question 4 of 7.** Tell me a little about your work. What is your employment type?",
@@ -168,13 +169,15 @@ def _handle_text(step, raw):
         err = "Please enter a name of 2 to 60 letters, or press Skip."
     elif step == "pin":
         pin = re.sub(r"\s", "", raw)
-        if re.fullmatch(r"[1-9]\d{5}", pin):
+        if pin_check.is_indian_pincode(pin):
             a["pincode"] = pin
-            say("assistant", "Thanks. " + (f"In our records this pincode is in the {predict.derive_tier(pin)[0][3:]} category."
-                                            if predict.derive_tier(pin)[1] is None
-                                            else "I could not find that exact pincode, so I will use an area-level estimate."))
+            tier, note = predict.derive_tier(pin)
+            tail = (f"ABC Credit files it under its {tier[3:]} area tier (our own grouping, not a place name)." if note is None
+                    else "I could not find that exact pincode, so I will use an area-level estimate.")
+            say("assistant", f"Thanks. That pincode is in {pin_check.place(pin)}. {tail}")
             return go("veh")
-        err = "Hmm, a pincode has exactly 6 digits and does not start with 0. Could you try again?"
+        err = ("Hmm, that does not look like an Indian pincode. It should have 6 digits and start with a number from 1 to 8 "
+               "(for example 400001). Could you try again?")
     elif step == "price":
         lo, hi = C.PRICE_ACCEPT
         if num is not None and lo <= num <= hi:
@@ -275,12 +278,14 @@ def render_result():
         st.write(res["reason"] + " This is a policy rule, not a model result.")
         return
     if res["decision"] == "APPROVED":
-        st.success("### Likely approved")
+        st.success("### Approved")
+        st.caption("Screening result from our model. The final offer follows document verification.")
         st.write(wording.rephrase(explain(res, a)))
         st.markdown("**Next steps.** Please bring: a photo ID, address proof, two passport photos, "
                     f"and {DOCS[a['employment']]}.")
     else:
-        st.error("### Likely declined")
+        st.error("### Declined")
+        st.caption("Screening result from our model. Please see the options below.")
         st.write(wording.rephrase(explain(res, a)))
         lower = predict.suggest_lower_loan(a)
         if lower:
@@ -406,9 +411,9 @@ elif step == "veh":
     NOT_LISTED = "My vehicle is not listed"
     with st.chat_message("assistant"):
         makes = sorted({v["make"] for v in lk["vehicles"] if v["make"] != "MISSING"})
-        make = st.selectbox("Make", makes + ["OTHER"], format_func=lambda m: NOT_LISTED if m == "OTHER" else C.MAKE_LABELS.get(m, m.title()))
+        make = st.selectbox("Vehicle range", makes + ["OTHER"], format_func=lambda m: NOT_LISTED if m == "OTHER" else C.MAKE_LABELS.get(m, m.title()))
         if make == "OTHER":
-            free = st.text_input("Optional: type the make and model", max_chars=60, help="For your reference only. It does not change the result.")
+            free = st.text_input("Optional: type the brand and model", max_chars=60, help="For your reference only. It does not change the result.")
             st.caption("The model has not seen this vehicle, so it will lean on the price, loan, income and area instead.")
             if st.button("Confirm vehicle"):
                 st.session_state.a.update(make="OTHER", product="OTHER", variant="OTHER")
@@ -417,7 +422,7 @@ elif step == "veh":
                 st.rerun()
         else:
             models = sorted(v["desc"] for v in lk["vehicles"] if v["make"] == make) + [NOT_LISTED]
-            desc = st.selectbox("Model", models)
+            desc = st.selectbox("Variant", models)
             if st.button("Confirm vehicle"):
                 if desc == NOT_LISTED:
                     prod = next(v["product"] for v in lk["vehicles"] if v["make"] == make)

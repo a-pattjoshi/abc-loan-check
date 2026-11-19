@@ -27,7 +27,7 @@ The decision comes only from the trained model (risk score against a threshold o
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/streamlit run src/app.py                       # the app
 .venv/bin/python src/predict.py data/mock_test_unlabeled.csv --out out.csv
-OMP_NUM_THREADS=2 .venv/bin/python src/qa_checks.py      # 302 checks, about 5 minutes
+OMP_NUM_THREADS=2 .venv/bin/python src/qa_checks.py      # 309 checks, about 5 minutes
 .venv/bin/python src/latency_test.py                     # 100 scripted sessions
 .venv/bin/python src/make_deploy.py                      # rebuild deploy_package/ for GitHub
 ```

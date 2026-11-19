@@ -129,6 +129,10 @@ def render():
             "mistakes of the earlier ones. The result is a **risk score from 0 to 1**.\n\n"
             "**4. Check.** We compare models with 5-fold cross-validation (train on 4 parts, test on the 5th, rotate). "
             "A simpler logistic regression is the baseline.")
+        st.info("**Did we balance the data?** No. We did not copy, delete or re-weight any rows, so the model learns from the real 5.25% decline mix. "
+                "Instead we handled the imbalance in three ways: (1) judge the model with PR-AUC and recall on DECLINED, not accuracy; "
+                "(2) keep the 20% hold-out and every cross-validation fold at the same 5% mix; (3) choose the decision threshold (0.089) from a cost curve. "
+                "We also tested a class-balanced version (last row below). It did not beat the plain model on PR-AUC (0.167 against 0.171), so we kept the simpler one.")
         comp = _csv("model_comparison.csv")
         if len(comp):
             st.dataframe(comp.rename(columns={"secs": "seconds"}), hide_index=True, width="stretch")

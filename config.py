@@ -41,6 +41,8 @@ EXTRA_GROUPS = {
 # ---- Chatbot (Phase 4) ----
 LOOKUPS_PATH = ROOT / "lookups.json"
 PRICE_RANGE = (30_000, 500_000)      # on-road price, rupees (training data: 50k to 363k)
+PRICE_ACCEPT = (10_000, 2_000_000)   # chat accepts this wide range; outside the training range it adds a caution
+TRAIN_PRICE = (50_000, 363_000)      # price range the model saw in training
 INCOME_MAX = 1_000_000               # monthly, rupees
 MIN_LOAN = 10_000
 # Optional wording layer (Groq). Off by default. Key goes in loan-chatbot/.env as GROQ_API_KEY (AP adds it).

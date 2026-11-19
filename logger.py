@@ -148,6 +148,9 @@ def _clean_features(f: dict) -> dict:
     for k, v in f.items():
         if k == "Pincode":  # the full pincode is not stored; pin2, pin3 and the tier are enough to replay the model
             continue
+        if k == "Net_salary":  # D16: store the income band only, never the exact figure
+            out["Net_salary_band"] = None if (v is None or v != v) else income_band(v)
+            continue
         out[k] = None if (v is None or (isinstance(v, float) and v != v)) else (v.item() if hasattr(v, "item") else v)
     return out
 
@@ -178,7 +181,7 @@ def masked_view(limit: int = 50, db: str | None = None) -> pd.DataFrame:
         f = json.loads(fj) if fj else {}
         out.append({"session": sid[:8], "started_at": st, "status": status, "decision": dec,
                     "risk": None if p is None else round(p, 4), "threshold": thr,
-                    "pincode_prefix": f.get("pin3"), "income_band": income_band(f["Net_salary"]) if f.get("Net_salary") is not None else None,
+                    "pincode_prefix": f.get("pin3"), "income_band": f.get("Net_salary_band"),
                     "LTV": None if f.get("LTV") is None else round(f["LTV"], 1), "latency_ms": None if lat is None else round(lat, 1)})
     return pd.DataFrame(out)
 

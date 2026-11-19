@@ -46,15 +46,15 @@ CONSENT_TEXT = ("Before we start: I use your answers only to check this loan and
                 "never as typed. Do you agree?")
 
 QUESTIONS = {
-    "name": "Optional: what name should I note? You can skip this. It does not affect the result.",
-    "pin": "**Question 1 of 7.** What is your 6-digit pincode?",
-    "veh": "**Question 2 of 7.** Which vehicle do you want to buy? Pick the make, then the model.",
-    "price": "**Question 3 of 7.** What is the on-road price of the vehicle, in rupees?",
-    "loan": "Still question 3. How much loan do you want, in rupees?",
-    "emp": "**Question 4 of 7.** What is your employment type?",
-    "inc": "**Question 5 of 7.** What is your monthly income, in rupees?",
-    "age": "**Question 6 of 7.** What is your age in years?",
-    "act": "**Question 7 of 7.** Do you have any active loan right now?",
+    "name": "First, what should I call you? This is optional and it does not affect your result, so feel free to skip.",
+    "pin": "**Question 1 of 7.** Great. Which area do you live in? Please share your 6-digit pincode.",
+    "veh": "**Question 2 of 7.** Nice. Which vehicle are you planning to buy? Pick the make, then the model. If yours is not on the list, choose \"My vehicle is not listed\".",
+    "price": "**Question 3 of 7.** What is the on-road price of the vehicle (the final price you pay, in rupees)?",
+    "loan": "Still question 3. How much of that would you like to borrow, in rupees?",
+    "emp": "**Question 4 of 7.** Tell me a little about your work. What is your employment type?",
+    "inc": "**Question 5 of 7.** What is your monthly income, in rupees? A rough figure is fine.",
+    "age": "**Question 6 of 7.** Almost there. What is your age in years?",
+    "act": "**Question 7 of 7.** Last one. Do you have any loan running right now?",
 }
 TEXT_STEPS = {"name": "Your name (optional)", "pin": "e.g. 560001", "price": "e.g. 95000", "loan": "e.g. 70000", "inc": "e.g. 25000", "age": "e.g. 32"}
 
@@ -85,8 +85,9 @@ def reset():
     st.session_state.step = "consent"
     st.session_state.phone_saved = False
     st.session_state.a = {}
-    st.session_state.msgs = [("assistant", "Hi, I am the ABC Credit loan assistant. I will ask 7 short questions "
-                                           "(about 2 to 3 minutes) and then tell you if your two-wheeler loan is likely to be approved."),
+    st.session_state.hist = []
+    st.session_state.msgs = [("assistant", "Hi, welcome to ABC Credit! 👋 I will ask you 7 quick questions "
+                                           "(about 2 to 3 minutes) and then tell you how likely your two-wheeler loan is to be approved."),
                              ("assistant", CONSENT_TEXT)]
     st.session_state.result = None
     for _, t in st.session_state.msgs:
@@ -106,10 +107,32 @@ def say(role, text, log=True):
 def go(step):
     st.session_state.step = step
     if step in QUESTIONS:
+        st.session_state.hist.append((step, len(st.session_state.msgs), dict(st.session_state.a)))
         q = QUESTIONS[step]
         if step == "loan":
             q += f" (up to {inr(st.session_state.a['price'])})"
         say("assistant", q)
+
+
+BACK_STEPS = ("pin", "veh", "price", "loan", "emp", "inc", "age", "act")
+
+
+def can_go_back():
+    h = st.session_state.get("hist", [])
+    return st.session_state.step in BACK_STEPS and len(h) >= 2 and h[-2][0] in BACK_STEPS
+
+
+def go_back():
+    """Return to the previous question and forget the answer to it."""
+    h = st.session_state.hist
+    if not can_go_back():
+        return
+    h.pop()
+    step, n, a = h.pop()
+    st.session_state.msgs = st.session_state.msgs[:n]
+    st.session_state.a = a
+    logger.log_turn(st.session_state.sid, step, "user", "[went back]")
+    go(step)
 
 
 def finish():
@@ -147,26 +170,31 @@ def _handle_text(step, raw):
         pin = re.sub(r"\s", "", raw)
         if re.fullmatch(r"[1-9]\d{5}", pin):
             a["pincode"] = pin
-            say("assistant", "Thanks. " + (f"I found your area ({predict.derive_tier(pin)[0][3:]})." if predict.derive_tier(pin)[1] is None
+            say("assistant", "Thanks. " + (f"In our records this pincode is in the {predict.derive_tier(pin)[0][3:]} category."
+                                            if predict.derive_tier(pin)[1] is None
                                             else "I could not find that exact pincode, so I will use an area-level estimate."))
             return go("veh")
-        err = "A pincode has exactly 6 digits and does not start with 0. Please try again."
+        err = "Hmm, a pincode has exactly 6 digits and does not start with 0. Could you try again?"
     elif step == "price":
-        lo, hi = C.PRICE_RANGE
+        lo, hi = C.PRICE_ACCEPT
         if num is not None and lo <= num <= hi:
             a["price"] = float(num)
+            tlo, thi = C.TRAIN_PRICE
+            if not tlo <= num <= thi:
+                say("assistant", f"Noted. This price is outside the range our model learned from ({inr(tlo)} to {inr(thi)}), "
+                                 "so please treat the result as less certain.")
             return go("loan")
-        err = f"Please enter the on-road price as a number between {inr(lo)} and {inr(hi)}."
+        err = f"Hmm, that does not look like a vehicle price. Could you enter it as a number between {inr(lo)} and {inr(hi)}?"
     elif step == "loan":
         if num is not None and C.MIN_LOAN <= num <= a["price"]:
             a["loan"] = float(num)
             return go("emp")
-        err = f"The loan must be a number from {inr(C.MIN_LOAN)} up to the vehicle price ({inr(a['price'])})."
+        err = f"Could you enter a loan amount from {inr(C.MIN_LOAN)} up to the vehicle price ({inr(a['price'])})?"
     elif step == "inc":
         if num is not None and 1000 <= num <= C.INCOME_MAX:
             a["income"] = float(num)
             return go("age")
-        err = f"Please enter your monthly income as a number between {inr(1000)} and {inr(C.INCOME_MAX)}."
+        err = f"Could you enter your monthly income as a number between {inr(1000)} and {inr(C.INCOME_MAX)}?"
     elif step == "age":
         if num is not None and math.isfinite(num) and num == int(num) and 1 <= num <= 120:
             a["age"] = int(num)
@@ -177,7 +205,7 @@ def _handle_text(step, raw):
                 logger.finish_session(st.session_state.sid, st.session_state.result, status="out_of_policy")
                 return
             return go("act")
-        err = "Please enter your age as a whole number of years."
+        err = "Could you enter your age as a whole number of years?"
     say("assistant", err)
 
 
@@ -197,7 +225,7 @@ def handle_choice(step, value, label):
     if step == "emp":
         a["employment"] = value
         if value in C.NO_INCOME_TYPES:
-            say("assistant", "Understood. I will skip the income question.")
+            say("assistant", "Got it. In that case I can skip the income question.")
             return go("age")
         return go("inc")
     if step == "act":
@@ -375,17 +403,31 @@ elif step in TEXT_STEPS:
         handle_text(step, raw)
         st.rerun()
 elif step == "veh":
+    NOT_LISTED = "My vehicle is not listed"
     with st.chat_message("assistant"):
         makes = sorted({v["make"] for v in lk["vehicles"] if v["make"] != "MISSING"})
-        make = st.selectbox("Make", makes, format_func=lambda m: C.MAKE_LABELS.get(m, m.title()))
-        models = sorted(v["desc"] for v in lk["vehicles"] if v["make"] == make)
-        desc = st.selectbox("Model", models)
-        if st.button("Confirm vehicle"):
-            v = next(v for v in lk["vehicles"] if v["desc"] == desc)
-            st.session_state.a.update(make=v["make"], product=v["product"], variant=v["variant"])
-            say("user", f"{C.MAKE_LABELS.get(make, make.title())}: {desc}")
-            go("price")
-            st.rerun()
+        make = st.selectbox("Make", makes + ["OTHER"], format_func=lambda m: NOT_LISTED if m == "OTHER" else C.MAKE_LABELS.get(m, m.title()))
+        if make == "OTHER":
+            free = st.text_input("Optional: type the make and model", max_chars=60, help="For your reference only. It does not change the result.")
+            st.caption("The model has not seen this vehicle, so it will lean on the price, loan, income and area instead.")
+            if st.button("Confirm vehicle"):
+                st.session_state.a.update(make="OTHER", product="OTHER", variant="OTHER")
+                say("user", f"{NOT_LISTED}" + (f": {' '.join(free.split())}" if free.strip() else ""))
+                go("price")
+                st.rerun()
+        else:
+            models = sorted(v["desc"] for v in lk["vehicles"] if v["make"] == make) + [NOT_LISTED]
+            desc = st.selectbox("Model", models)
+            if st.button("Confirm vehicle"):
+                if desc == NOT_LISTED:
+                    prod = next(v["product"] for v in lk["vehicles"] if v["make"] == make)
+                    st.session_state.a.update(make=make, product=prod, variant="OTHER")
+                else:
+                    v = next(v for v in lk["vehicles"] if v["desc"] == desc)
+                    st.session_state.a.update(make=v["make"], product=v["product"], variant=v["variant"])
+                say("user", f"{C.MAKE_LABELS.get(make, make.title())}: {desc}")
+                go("price")
+                st.rerun()
 elif step == "emp":
     with st.chat_message("assistant"):
         code = st.selectbox("Employment type", list(C.EMPLOYMENT_LABELS), format_func=C.EMPLOYMENT_LABELS.get)
@@ -406,6 +448,9 @@ elif step == "no_consent":
 elif step in ("done", "policy"):
     with st.chat_message("assistant"):
         render_result()
+
+if can_go_back():
+    st.button("← Back to the previous question", on_click=go_back)
 
 st.divider()
 st.caption("Results come from a trained prediction model checked against a fixed rule for age (18 to 60). "

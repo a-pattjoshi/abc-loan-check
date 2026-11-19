@@ -20,7 +20,7 @@ The brief gives no weights. We weighted the six assessment areas in section 10 a
 | Consent | Done (added 18 Nov) | First question of the chat. Refusal ends the session and keeps no answers. |
 | No personal data to a language model | Done | The language model helper is off. If switched on it receives text scrubbed of digit runs and emails. |
 | Show the masking to the reviewer | Done | "How it works" tab, Privacy section, and the masked log samples in reports/. |
-| Known residual risks | Open | Exact income stays in the saved feature record (decision D16) so a score can be replayed. Price and loan amount answers are stored as typed (business data, not identifiers). The public demo log is temporary. |
+| Known residual risks | Open | Income is stored as a band only, in answers and in the feature record (decision D16, changed 2026-11-19). Price and loan amount answers are stored as typed (business data, not identifiers). The public demo log is temporary. |
 
 ## What would lift the score to about 90
 1. Confirm the hidden test file format with the professor and deliver the predictions file (+3).

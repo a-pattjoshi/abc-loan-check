@@ -3,7 +3,7 @@
 ## Links
 - Live app: https://pgai-group6-loan-approval.streamlit.app/
 - Code (app and model): https://github.com/a-pattjoshi/abc-loan-check
-- Short report: reports/Group6_Loan_Approval_Report_v1.pdf (also in the GitHub repo)
+- Short report: reports/Group6_Loan_Approval_Report_v2.pdf (also in the GitHub repo)
 
 ## What the app does
 Three modes in the sidebar: **Loan check** (consent, optional name, 7 questions, Approve or Decline, next steps), **Score a file** (upload a CSV, or use the built-in sample file, and download predictions), **How it works** (plain-English guide with a live what-if tool).
@@ -16,7 +16,7 @@ The decision comes only from the trained model (risk score against a threshold o
 | 2 Trained model with reproducible code | notebooks/02_features_model.ipynb, notebooks/03_model_threshold.ipynb, src/train.py, models/model.joblib (seed 42) |
 | 3 Chatbot with PII masking | src/app.py, src/predict.py, src/logger.py, src/explain.py |
 | 4 Predictions on the held-out test set | `python src/predict.py <file.csv> --out predictions.csv` or the Score a file mode. Format still to confirm with the professor |
-| 5 Short report | reports/Group6_Loan_Approval_Report_v1.pdf (HTML source alongside) |
+| 5 Short report | reports/Group6_Loan_Approval_Report_v2.pdf (HTML source alongside) |
 | Self-assessment against section 10 | reports/evaluation_vs_brief.md |
 | Decisions made along the way | reports/decision_log.md (D1 to D25) |
 | Numbers behind the report | reports/report_numbers.md, reports/figures/ |
@@ -27,7 +27,7 @@ The decision comes only from the trained model (risk score against a threshold o
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/streamlit run src/app.py                       # the app
 .venv/bin/python src/predict.py data/mock_test_unlabeled.csv --out out.csv
-OMP_NUM_THREADS=2 .venv/bin/python src/qa_checks.py      # 290 checks, about 5 minutes
+OMP_NUM_THREADS=2 .venv/bin/python src/qa_checks.py      # 302 checks, about 5 minutes
 .venv/bin/python src/latency_test.py                     # 100 scripted sessions
 .venv/bin/python src/make_deploy.py                      # rebuild deploy_package/ for GitHub
 ```

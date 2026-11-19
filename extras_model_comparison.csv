@@ -1,0 +1,8 @@
+model,ROC_AUC,PR_AUC,Brier,LogLoss,recall_if_19pct_declined,seconds
+"Logistic regression, L2 (Ridge), C=1",0.7752,0.1639,0.0469,0.181,0.526,3.2
+"Logistic regression, L2 (Ridge), C=0.1",0.7686,0.1564,0.0471,0.1823,0.515,2.8
+"Logistic regression, L1 (Lasso), C=0.1",0.773,0.1626,0.0469,0.1815,0.523,18.0
+"Logistic regression, L1 (Lasso), C=0.01",0.7482,0.134,0.0478,0.1867,0.471,3.7
+Decision tree (depth 6),0.76,0.1492,0.0472,0.1853,0.509,2.8
+Random forest (150 trees),0.7811,0.1691,0.0466,0.1794,0.537,18.4
+Gradient boosting (our choice),0.7784,0.1708,0.0466,0.1794,0.535,7.3

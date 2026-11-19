@@ -1,0 +1,5 @@
+field,mean,median,skewness,shape,we used
+Age,34.4,32.0,0.63,roughly symmetric,median
+LTV,77.7,81.3,-1.32,skewed (use median),median
+Loan_Amount,89287.4,90073.0,0.17,roughly symmetric,median
+Net_salary,33983.6,30000.0,16.16,skewed (use median),median

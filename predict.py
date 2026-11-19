@@ -23,6 +23,29 @@ def _load():
     return model, meta, lookups.load()
 
 
+def explain_factors(a: dict, top: int = 3, min_delta: float = 0.01) -> list:
+    """Which answers pushed the risk score up compared with a typical applicant. Explanation only, never the decision.
+
+    For each answer we swap in a neutral value (loan at 60% of the price, an unseen area, an unlisted vehicle, income 25,000,
+    age 35, an active loan) and see how much the score falls. Returns [(label, drop_in_risk), ...] largest first.
+    """
+    base = score(a)["probability"]
+    tests = [("Your loan is a high share of the vehicle price", {"loan": a["price"] * 0.6}),
+             ("Your area (pincode)", {"pincode": "999999"}),
+             ("The vehicle you chose", {"make": "OTHER", "product": "OTHER", "variant": "OTHER"}),
+             ("Your age", {"age": 35})]
+    if a["employment"] not in C.NO_INCOME_TYPES:
+        tests.append(("Your income", {"income": 25000.0}))
+    if not a["active_loan"]:
+        tests.append(("Having no loan history on file", {"active_loan": True}))
+    out = []
+    for label, change in tests:
+        drop = base - score({**a, **change})["probability"]
+        if drop >= min_delta:
+            out.append((label, drop))
+    return sorted(out, key=lambda t: -t[1])[:top]
+
+
 def policy_gate(age: int):
     """Return None if allowed, else the reason text."""
     lo, hi = C.POLICY_AGE
@@ -148,6 +171,17 @@ def score_frame(raw: pd.DataFrame, threshold=None):
             raw[c] = pd.NA
     for c in UPPER_COLS:  # categories are upper case in training; "sal" must mean "SAL"
         raw[c] = raw[c].astype("string").str.strip().str.upper().replace("", pd.NA)
+    yes = {"YES", "Y", "TRUE", "1", "ACTIVE", "PAST_LOANS_ACTIVE"}
+    no = {"NO", "N", "FALSE", "0", "NONE", "NO_PAST_LOANS", "NIL"}
+    raw["PAST_LOANS_ACTIVE"] = raw["PAST_LOANS_ACTIVE"].map(
+        lambda v: pd.NA if pd.isna(v) else ("PAST_LOANS_ACTIVE" if v in yes else "NO_PAST_LOANS" if v in no else v)).astype("string")
+    by_label = {lab.upper(): code for code, lab in C.EMPLOYMENT_LABELS.items()}
+    raw["Employment_Type"] = raw["Employment_Type"].map(lambda v: pd.NA if pd.isna(v) else by_label.get(v, v)).astype("string")
+    for col, ok, nice in (("Employment_Type", set(C.EMPLOYMENT_LABELS), "employment type"),
+                          ("PAST_LOANS_ACTIVE", {"PAST_LOANS_ACTIVE", "NO_PAST_LOANS"}, "active-loan value")):
+        odd = int((raw[col].notna() & ~raw[col].isin(ok)).sum())
+        if odd:
+            warnings.append(f"{odd} rows have an {nice} not seen in training ({col}). They are scored with the typical profile.")
     tiers = {v.upper(): v for v in set(lk["pin_tier"].values())}
     raw["Final_Tier"] = raw["Final_Tier"].astype("string").str.strip().str.upper().map(tiers).astype("string")
     prep = clean.prepare_rows(raw)
@@ -158,10 +192,10 @@ def score_frame(raw: pd.DataFrame, threshold=None):
     if len(ltv) and ltv.max() <= 1.5:
         warnings.append("LTV values are all 1.5 or below. The model expects a percentage (for example 80, not 0.8). "
                         "Scores are not reliable until this is fixed.")
-    bad = {c: int((raw[c].notna() & pd.to_numeric(raw[c], errors="coerce").isna()).sum()) for c in ("Age", "Loan_Amount", "LTV", "Net_salary")}
+    bad = {c: int((raw[c].notna() & clean.to_num(raw[c]).isna()).sum()) for c in ("Age", "Loan_Amount", "LTV", "Net_salary")}
     bad = {c: k for c, k in bad.items() if k > 0}
     if bad:
-        warnings.append("Values that are not numbers were treated as blank: " + ", ".join(f"{c} ({k})" for c, k in bad.items()))
+        warnings.append("Values that are not valid positive numbers were treated as blank: " + ", ".join(f"{c} ({k})" for c, k in bad.items()))
     known_makes = {v["make"] for v in lk["vehicles"]}
     unseen = int((prep["Make_Code"].notna() & ~prep["Make_Code"].isin(known_makes)).sum())
     if unseen:

@@ -93,6 +93,16 @@ def clean_raw(raw: pd.DataFrame):
     return df, pd.DataFrame(log), conflicts
 
 
+def to_num(col: pd.Series) -> pd.Series:
+    """Tolerant number reader for files typed by people: "25,000", "Rs. 25000", "₹25k" is NOT read (k is ambiguous),
+    "30 years", "80%". Anything else that is not a number becomes NaN. Negative and infinite values become NaN."""
+    t = col.astype("string").str.strip()
+    t = t.str.replace(r"(?i)\b(rs\.?|inr|rupees?|yrs?|years?|%)", "", regex=True).str.replace(r"[₹,%\s]", "", regex=True)
+    out = pd.to_numeric(t, errors="coerce").astype(float)
+    out[~np.isfinite(out) | (out < 0)] = np.nan
+    return out
+
+
 def prepare_rows(raw: pd.DataFrame) -> pd.DataFrame:
     """Row-preserving version of clean_raw for scoring a new file: nothing is dropped, row order is kept.
 
@@ -103,7 +113,7 @@ def prepare_rows(raw: pd.DataFrame) -> pd.DataFrame:
     for c in df.select_dtypes(exclude="number").columns:
         df[c] = df[c].astype("string").str.strip().replace("", pd.NA)
     for c in ("Age", "Pincode", "Loan_Amount", "LTV", "Net_salary"):
-        df[c] = pd.to_numeric(df[c], errors="coerce").astype(float)  # plain float64 so NA compares as False (text files give nullable dtypes)
+        df[c] = to_num(df[c])  # plain float64 so NA compares as False (text files give nullable dtypes)
     df["Pincode"] = df["Pincode"].round().astype("Int64")
     feat_cols = [c for c in df.columns if c not in ("ID", TARGET)]
     df["missing_any"] = df[feat_cols].isna().any(axis=1).astype(int)

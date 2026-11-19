@@ -1,0 +1,21 @@
+group by,group,applications,actual decline rate,model decline rate,recall on declined,precision
+Gender,Female,5142,0.053,0.186,0.545,0.157
+Gender,Male,16539,0.052,0.19,0.544,0.15
+Age band,under 25,4614,0.058,0.239,0.591,0.144
+Age band,25 to 34,7523,0.054,0.204,0.571,0.151
+Age band,35 to 44,5295,0.053,0.161,0.496,0.164
+Age band,45 to 60,4029,0.043,0.142,0.497,0.151
+Age band,over 60,214,0.033,0.136,0.286,0.069
+Final_Tier,01 Megapolis (A),137,0.029,0.0,0.0,0.0
+Final_Tier,02 Megapolis (B),696,0.052,0.089,0.278,0.161
+Final_Tier,03 Large Metro,237,0.03,0.076,0.143,0.056
+Final_Tier,04 Metro,566,0.051,0.134,0.448,0.171
+Final_Tier,05 Urban,1194,0.044,0.162,0.491,0.134
+Final_Tier,06 Semi-Urban,4352,0.052,0.201,0.605,0.158
+Final_Tier,07 Rural,14498,0.054,0.198,0.552,0.15
+Employment_Type,AGR,4281,0.049,0.17,0.543,0.156
+Employment_Type,NPP,116,0.052,0.198,0.5,0.13
+Employment_Type,NREGI,2784,0.064,0.208,0.575,0.178
+Employment_Type,SAL,6600,0.052,0.207,0.596,0.149
+Employment_Type,SEP,7726,0.052,0.18,0.488,0.142
+Employment_Type,STU,144,0.0,0.076,0.0,0.0

@@ -287,6 +287,10 @@ def render_result():
         st.error("### Declined")
         st.caption("Screening result from our model. Please see the options below.")
         st.write(wording.rephrase(explain(res, a)))
+        facts = predict.explain_factors(a)
+        if facts:
+            st.markdown("**What pushed the score up** (compared with a typical applicant): " + "; ".join(
+                f"{lab.lower() if i else lab} (about {d * 100:.0f} points of risk)" for i, (lab, d) in enumerate(facts)) + ".")
         lower = predict.suggest_lower_loan(a)
         if lower:
             st.markdown(f"**You can try a smaller loan.** A loan of about **{inr(lower)}** "

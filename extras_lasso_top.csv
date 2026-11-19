@@ -1,0 +1,10 @@
+input,coefficient
+LTV,0.854
+PAST_LOANS_ACTIVE_PAST_LOANS_ACTIVE,-0.327
+ltv_was_zero,0.308
+missing_any,0.265
+Product_Code_MC,0.197
+Age,-0.097
+Loan_Amount,0.096
+log_salary,0.066
+no_income,0.037

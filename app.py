@@ -48,7 +48,7 @@ CONSENT_TEXT = ("Before we start: I use your answers only to check this loan and
 
 QUESTIONS = {
     "name": "First, what should I call you? This is optional and it does not affect your result, so feel free to skip.",
-    "pin": "**Question 1 of 7.** Great. Which area do you live in? Please share your 6-digit pincode.",
+    "pin": "**Question 1 of 7.** Great. Please share the pincode of the area you live in (6 digits).",
     "veh": "**Question 2 of 7.** Nice. Which two-wheeler are you planning to buy? Pick the range (for example Apache or Jupiter), then the variant. If yours is not on the list, choose \"My vehicle is not listed\".",
     "price": "**Question 3 of 7.** What is the on-road price of the vehicle (the final price you pay, in rupees)?",
     "loan": "Still question 3. How much of that would you like to borrow, in rupees?",
@@ -168,7 +168,7 @@ def _handle_text(step, raw):
             return go("pin")
         err = "Please enter a name of 2 to 60 letters, or press Skip."
     elif step == "pin":
-        pin = re.sub(r"\s", "", raw)
+        pin = pin_check.extract(raw) or ""
         if pin_check.is_indian_pincode(pin):
             a["pincode"] = pin
             tier, note = predict.derive_tier(pin)
@@ -176,7 +176,7 @@ def _handle_text(step, raw):
                     else "I could not find that exact pincode, so I will use an area-level estimate.")
             say("assistant", f"Thanks. That pincode is in {pin_check.place(pin)}. {tail}")
             return go("veh")
-        err = ("Hmm, that does not look like an Indian pincode. It should have 6 digits and start with a number from 1 to 8 "
+        err = ("Hmm, I could not read an Indian pincode from that. Just the 6 digits will do, starting with a number from 1 to 8 "
                "(for example 400001). Could you try again?")
     elif step == "price":
         lo, hi = C.PRICE_ACCEPT

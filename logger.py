@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 import pandas as pd
 
 import amounts
+import pincode
 import config as C
 
 DB_PATH = C.ROOT / "logs" / "sessions.db"
@@ -85,7 +86,7 @@ def mask_answer(step: str, raw: str, valid: bool) -> str:
     if step in ("name", "phone"):
         return f"[{step} provided]"
     if step == "pin":
-        return re.sub(r"\s", "", raw)[:3] + "***"
+        return (pincode.extract(raw) or re.sub(r"\s", "", raw))[:3] + "***"
     if step == "inc":
         num = amounts.parse_amount(raw)
         return "[income]" if num is None else f"income band {income_band(num)}"

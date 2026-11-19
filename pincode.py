@@ -25,3 +25,12 @@ def place(pin: str) -> str:
         return _CITIES[pin[:3]]
     p = int(pin[:2])
     return next((n for lo, hi, n in _CIRCLES if lo <= p <= hi), "India")
+
+
+def extract(raw: str):
+    """Pull a 6-digit pincode out of what a person typed: "560001", "560 001", "Delhi, 110095". None if there is not exactly one."""
+    digits = re.sub(r"[^0-9]", "", raw)
+    if len(digits) == 6:
+        return digits
+    found = re.findall(r"(?<![0-9])[0-9]{6}(?![0-9])", raw)
+    return found[0] if len(found) == 1 else None

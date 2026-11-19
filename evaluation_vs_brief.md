@@ -23,7 +23,7 @@ The brief gives no weights. We weighted the six assessment areas in section 10 a
 | Known residual risks | Open | Income is stored as a band only, in answers and in the feature record (decision D16, changed 2026-11-19). Price and loan amount answers are stored as typed (business data, not identifiers). The public demo log is temporary. |
 
 ## Changes since version 1 (19 Nov)
-Income band only in the feature record (D16b). Back button, unlisted vehicles, wider price range with caution, warmer wording, Approved/Declined headline, Indian pincode check, vehicle-range labels (D29 to D37). File scorer now reads "25,000", "Rs. 25000", "30 years", Yes/No and survives negative values (D38). 321 automated checks.
+Income band only in the feature record (D16b). Back button, unlisted vehicles, wider price range with caution, warmer wording, Approved/Declined headline, Indian pincode check, vehicle-range labels (D29 to D37). File scorer now reads "25,000", "Rs. 25000", "30 years", Yes/No and survives negative values (D38). 326 automated checks.
 
 ## What would lift the score to about 90
 1. Confirm the hidden test file format with the professor and deliver the predictions file (+3).

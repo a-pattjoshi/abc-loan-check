@@ -1,4 +1,4 @@
-# ABC Credit two-wheeler loan check (PGAI Group 6)
+# ABC Credit two-wheeler loan check (PGAI Group 11)
 
 Streamlit app with three modes:
 - **Loan check**: consent, optional name, 7 questions, then Approve or Decline from a trained model, with next steps.

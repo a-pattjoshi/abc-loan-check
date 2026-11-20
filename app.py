@@ -37,8 +37,8 @@ def clean_free(txt: str) -> str:
 
 def scroll_to_bottom():
     """Keep the newest question in view. Streamlit otherwise jumps back to the top after menu steps."""
-    st.html(f"<script>/* {time.time_ns()} */ const go=()=>{{const m=document.querySelector('[data-testid=\"stMain\"]')||document.querySelector('section.main'); "
-            "if(m){m.scrollTo({top:m.scrollHeight});}}; go(); setTimeout(go,150); setTimeout(go,500);</script>", unsafe_allow_javascript=True)
+    st.html(f"<script>/* {time.time_ns()} */ (function(){{ const go=()=>{{const m=document.querySelector('[data-testid=\"stMain\"]')||document.querySelector('section.main'); "
+            "if(m){m.scrollTo({top:m.scrollHeight});}}; go(); setTimeout(go,150); setTimeout(go,500); })();</script>", unsafe_allow_javascript=True)
 
 
 def inr(x) -> str:

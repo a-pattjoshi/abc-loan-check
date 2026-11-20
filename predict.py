@@ -91,6 +91,61 @@ def score(a: dict) -> dict:
             "latency_ms": (time.perf_counter() - t0) * 1000}
 
 
+INCOME_GRID = (1000.0, 8000.0, 15000.0, 25000.0, 40000.0, 70000.0, 150000.0, 1000000.0)
+
+
+def decision_bounds(a: dict) -> dict:
+    """Lowest and highest risk score over every plausible answer to the questions that are not asked yet.
+
+    `a` holds the answers so far: age, price, loan and pincode are required; make/product/variant, employment, income and
+    active_loan are optional. Missing answers are replaced by every vehicle in the menu, every employment type, a grid of
+    incomes and both active-loan answers. If even the highest score stays below the cut-off the decision is certainly
+    APPROVED; if even the lowest is at or above it the decision is certainly DECLINED. The decision still comes only from
+    the model: asking more questions could not change it.
+    """
+    model, meta, lk = _load()
+    thr = float(meta["threshold"])
+    tier, _ = derive_tier(a["pincode"])
+    vehicles = ([(a["make"], a["product"], a["variant"])] if "make" in a else
+                sorted({(v["make"], v["product"], v["variant"]) for v in lk["vehicles"]} | {("OTHER", "OTHER", "OTHER")}))
+    emps = [a["employment"]] if "employment" in a else list(C.EMPLOYMENT_LABELS)
+    rows = []
+    for make, product, variant in vehicles:
+        for emp in emps:
+            if emp in C.NO_INCOME_TYPES:
+                incomes = [0.0]
+            else:
+                incomes = [float(a["income"])] if "income" in a else list(INCOME_GRID)
+            for inc in incomes:
+                for act in ([bool(a["active_loan"])] if "active_loan" in a else [False, True]):
+                    rows.append({
+                        "Pincode": int(a["pincode"]), "Final_Tier": tier, "pin2": a["pincode"][:2], "pin3": a["pincode"][:3],
+                        "Make_Code": make, "Product_Code": product, "Model_Variant": variant,
+                        "LTV": 100.0 * a["loan"] / a["price"], "ltv_was_zero": 0, "Loan_Amount": float(a["loan"]),
+                        "Employment_Type": emp, "Net_salary": inc, "no_income": int(inc == 0), "Age": float(a["age"]),
+                        "PAST_LOANS_ACTIVE": "PAST_LOANS_ACTIVE" if act else "NO_PAST_LOANS",
+                        "missing_any": 0, "Gender": None, "Qualifications": None, "Resident_Type": None})
+    X = F.add_features(pd.DataFrame(rows))
+    p = model.predict_proba(X)[:, 1]
+    mid_i = int(abs(p - float(pd.Series(p).median())).argmin())
+    lo, hi = float(p.min()), float(p.max())
+    certain = "DECLINED" if lo >= thr else "APPROVED" if hi < thr else None
+    return {"lo": lo, "hi": hi, "mid": float(p[mid_i]), "threshold": thr, "certain": certain, "combinations": len(rows),
+            "features": X.iloc[mid_i].to_dict(), "model": meta["model"], "saved_at": meta["saved_at"]}
+
+
+def suggest_lower_loan_partial(a: dict, step=0.05, floor=0.5):
+    """Like suggest_lower_loan, for an early stop: the largest loan after which the decision is certainly APPROVED."""
+    loan = a["loan"]
+    k = 1
+    while loan * (1 - step * k) >= max(C.MIN_LOAN, loan * floor):
+        trial = {**a, "loan": round(loan * (1 - step * k), -2)}
+        if decision_bounds(trial)["certain"] == "APPROVED":
+            return trial["loan"]
+        k += 1
+    return None
+
+
 def suggest_lower_loan(a: dict, step=0.05, floor=0.5):
     """Largest loan (in 5% steps down from the request, not below 50% of it) that the model approves."""
     loan = a["loan"]
@@ -166,6 +221,12 @@ def score_frame(raw: pd.DataFrame, threshold=None):
     info["missing_columns"] = missing
     if missing:
         warnings.append("Columns not in the file, filled with typical values: " + ", ".join(missing))
+    extra = [c for c in raw.columns if c not in RAW_COLS]
+    info["ignored_columns"] = extra
+    if extra:
+        warnings.append("Columns the model was not trained on were ignored (for example a credit score or tax return field): "
+                        + ", ".join(str(c) for c in extra[:12]) + (" ..." if len(extra) > 12 else "")
+                        + ". They do not change any prediction.")
     for c in RAW_COLS:
         if c not in raw.columns:
             raw[c] = pd.NA

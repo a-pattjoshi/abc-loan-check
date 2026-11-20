@@ -3,7 +3,7 @@
 ## Links
 - Live app: https://pgai-group11-loan-approval.streamlit.app/
 - Code (app and model): https://github.com/a-pattjoshi/abc-loan-check
-- Short report: reports/Group11_Loan_Approval_Report_v7.pdf (also in the GitHub repo)
+- Short report: reports/Group11_Loan_Approval_Report_v8.pdf (also in the GitHub repo)
 
 ## What the app does
 Three modes in the sidebar: **Loan check** (consent, optional name, 7 questions, Approve or Decline, next steps), **Score a file** (upload a CSV, or use the built-in sample file, and download predictions), **How it works** (plain-English guide with a live what-if tool).
@@ -16,7 +16,7 @@ The decision comes only from the trained model (risk score against a threshold o
 | 2 Trained model with reproducible code | notebooks/02_features_model.ipynb, notebooks/03_model_threshold.ipynb, src/train.py, models/model.joblib (seed 42) |
 | 3 Chatbot with PII masking | src/app.py, src/predict.py, src/logger.py, src/explain.py |
 | 4 Predictions on the held-out test set | `python src/predict.py <file.csv> --out predictions.csv` or the Score a file mode. Format still to confirm with the professor |
-| 5 Short report | reports/Group11_Loan_Approval_Report_v7.pdf (HTML source alongside) |
+| 5 Short report | reports/Group11_Loan_Approval_Report_v8.pdf (HTML source alongside) |
 | Self-assessment against section 10 | reports/evaluation_vs_brief.md |
 | Decisions made along the way | reports/decision_log.md (D1 to D25) |
 | Numbers behind the report | reports/report_numbers.md, reports/figures/ |
@@ -45,3 +45,10 @@ ROC-AUC 0.783, PR-AUC 0.182, accuracy 81.6%, precision 15.1%, recall on DECLINED
 
 ## Privacy note for this zip
 data/ holds rows derived from the course training file. Share this zip only with the course team and the professor.
+
+## Notebook for testing a new CSV (for the professor)
+`ABC_Credit_Loan_Approval_Final.ipynb` rebuilds the whole project from `training_data.csv` (cleaning, features, gradient boosting, threshold, hold-out check) in about a minute and then scores any CSV.
+1. Put `training_data.csv` and your test file next to the notebook.
+2. In Section 1 set `TEST_CSV` to your file name.
+3. Run all cells. Predictions are saved to `predictions.csv` (ID, Decision, P_DECLINED, policy_age_ok, Final_Decision). If the file has a `Decision` column the notebook prints accuracy, precision, recall, F1, ROC-AUC and the confusion matrix.
+Extra columns such as a CIBIL score or ITR fields are ignored and named in a warning. Try `sample_with_extra_columns.csv`. Needs Python 3.9+, pandas, numpy, scikit-learn 1.3+, matplotlib.

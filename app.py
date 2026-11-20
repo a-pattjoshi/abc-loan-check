@@ -61,13 +61,13 @@ CONSENT_TEXT = ("Before we start: I use your answers only to check this loan and
 
 QUESTIONS = {
     "name": "First, what should I call you? This is optional and it does not affect your result, so feel free to skip.",
-    "pin": "**Question 1 of 7.** Great. Please share the pincode of the area you live in (6 digits).",
-    "veh": "**Question 2 of 7.** Nice. Which two-wheeler are you planning to buy? Pick the brand, then the model. If yours is not on the list, choose \"Other brand\" or \"My model is not listed\".",
-    "price": "**Question 3 of 7.** What is the on-road price of the vehicle (the final price you pay, in rupees)? Please type numbers only.",
-    "loan": "Still question 3. How much of that would you like to borrow, in rupees?",
-    "emp": "**Question 4 of 7.** Tell me a little about your work. What is your employment type?",
-    "inc": "**Question 5 of 7.** What is your monthly income, in rupees? A rough figure is fine. Please type numbers only.",
-    "age": "**Question 6 of 7.** Almost there. What is your age in years?",
+    "age": "**Question 1 of 7.** Let's start with the quick one. How old are you, in years? (We lend to applicants aged 18 to 60.)",
+    "pin": "**Question 3 of 7.** Please share the pincode of the area you live in (6 digits).",
+    "veh": "**Question 4 of 7.** Nice. Which two-wheeler are you planning to buy? Pick the brand, then the model. If yours is not on the list, choose \"Other brand\" or \"My model is not listed\".",
+    "price": "**Question 2 of 7.** Great. What is the on-road price of the vehicle (the final price you pay, in rupees)? Please type numbers only.",
+    "loan": "Still question 2. How much of that would you like to borrow, in rupees?",
+    "emp": "**Question 5 of 7.** Tell me a little about your work. What is your employment type?",
+    "inc": "**Question 6 of 7.** What is your monthly income, in rupees? A rough figure is fine. Please type numbers only.",
     "act": "**Question 7 of 7.** Last one. Do you have any loan running right now?",
 }
 TEXT_STEPS = {"name": "Your name (optional)", "pin": "e.g. 560001", "price": "e.g. 95000", "loan": "e.g. 70000", "inc": "e.g. 25000", "age": "e.g. 32"}
@@ -128,7 +128,7 @@ def go(step):
         say("assistant", q)
 
 
-BACK_STEPS = ("pin", "veh", "price", "loan", "emp", "inc", "age", "act")
+BACK_STEPS = ("age", "pin", "veh", "price", "loan", "emp", "inc", "act")
 
 
 def can_go_back():
@@ -147,6 +147,40 @@ def go_back():
     st.session_state.a = a
     logger.log_turn(st.session_state.sid, step, "user", "[went back]")
     go(step)
+
+
+def decide_or_go(next_step):
+    """Adaptive questioning. After each answer we ask the model whether the remaining questions could still change the decision.
+    If every plausible answer gives the same result, we stop and say so. Otherwise we ask the next question."""
+    a = st.session_state.a
+    if all(k in a for k in ("age", "price", "loan", "pincode")):
+        b = predict.decision_bounds(a)
+        if b["certain"]:
+            return finish_early(b)
+    return go(next_step)
+
+
+def finish_early(b):
+    a = st.session_state.a
+    asked = [k for k in ("age", "price", "pincode", "make", "employment", "income") if k in a]
+    st.session_state.step = "done"
+    st.session_state.result = {"decision": b["certain"], "probability": b["mid"], "threshold": b["threshold"], "features": b["features"],
+                               "model": b["model"], "saved_at": b["saved_at"], "latency_ms": 0.0, "early": True, "lo": b["lo"], "hi": b["hi"]}
+    say("assistant", "Good news: I can already give you the answer, so I will stop here. "
+                     "Whatever you would answer to my remaining questions, the model's result would be the same.")
+    logger.finish_session(st.session_state.sid, st.session_state.result, status="finished_early")
+
+
+def reenter_age():
+    """After an age rejection, let the applicant correct a typing mistake without starting over."""
+    h = st.session_state.hist
+    if h and h[-1][0] == "age":
+        _, n, a = h.pop()
+        st.session_state.msgs = st.session_state.msgs[:n]
+        st.session_state.a = a
+        st.session_state.result = None
+        logger.log_turn(st.session_state.sid, "age", "user", "[re-entered age]")
+        go("age")
 
 
 def finish():
@@ -178,7 +212,7 @@ def _handle_text(step, raw):
         if 2 <= len(name) <= 60 and all(ch.isalpha() or ch in " .'-" for ch in name):
             logger.save_applicant(st.session_state.sid, name=name)
             say("assistant", "Thanks.")
-            return go("pin")
+            return go("age")
         err = "Please enter a name of 2 to 60 letters, or press Skip."
     elif step == "pin":
         pin = pin_check.extract(raw) or ""
@@ -188,7 +222,7 @@ def _handle_text(step, raw):
             tail = (f"ABC Credit files it under its {tier[3:]} area tier (our own grouping, not a place name)." if note is None
                     else "I could not find that exact pincode, so I will use an area-level estimate.")
             say("assistant", f"Thanks. That pincode is in {pin_check.place(pin)}. {tail}")
-            return go("veh")
+            return decide_or_go("veh")
         err = ("Hmm, I could not read an Indian pincode from that. Just the 6 digits will do, starting with a number from 1 to 8 "
                "(for example 400001). Could you try again?")
     elif step == "price":
@@ -204,12 +238,12 @@ def _handle_text(step, raw):
     elif step == "loan":
         if num is not None and C.MIN_LOAN <= num <= a["price"]:
             a["loan"] = float(num)
-            return go("emp")
+            return go("pin")
         err = f"Please type numbers only, from {inr(C.MIN_LOAN)} up to the vehicle price ({inr(a['price'])})."
     elif step == "inc":
         if num is not None and 1000 <= num <= C.INCOME_MAX:
             a["income"] = float(num)
-            return go("age")
+            return decide_or_go("act")
         err = f"Please type numbers only, between {inr(1000)} and {inr(C.INCOME_MAX)} (for example 25000)."
     elif step == "age":
         t = raw.strip()
@@ -218,10 +252,10 @@ def _handle_text(step, raw):
             reason = predict.policy_gate(a["age"])
             if reason:
                 st.session_state.step = "policy"
-                st.session_state.result = {"decision": "OUT_OF_POLICY", "reason": reason}
+                st.session_state.result = {"decision": "OUT_OF_POLICY", "reason": f"You entered age {a['age']}. {reason}"}
                 logger.finish_session(st.session_state.sid, st.session_state.result, status="out_of_policy")
                 return
-            return go("act")
+            return go("price")
         err = "Please type your age as a whole number of years, digits only (for example 32)."
     say("assistant", err)
 
@@ -238,13 +272,13 @@ def handle_choice(step, value, label):
         logger.finish_session(st.session_state.sid, st.session_state.result, status="no_consent")
         return say("assistant", "No problem. I have not kept your answers. You can start over any time.")
     if step == "name":
-        return go("pin")
+        return go("age")
     if step == "emp":
         a["employment"] = value
         if value in C.NO_INCOME_TYPES:
             say("assistant", "Got it. In that case I can skip the income question.")
-            return go("age")
-        return go("inc")
+            return decide_or_go("act")
+        return decide_or_go("inc")
     if step == "act":
         a["active_loan"] = value
         return finish()
@@ -256,7 +290,7 @@ def explain(res, a):
     pts = [f"Your loan covers **{ltv:.0f}%** of the vehicle price."]
     if ltv > 90:
         pts.append("Loans above 90% of the price were declined more often in our past data.")
-    if not a["active_loan"] and ltv > 90:
+    if not a.get("active_loan", True) and ltv > 90:
         pts.append("A high loan share with no loan history on file was declined more often than the same share with an active loan.")
     return " ".join(pts)
 
@@ -288,24 +322,27 @@ def render_phone():
 def render_result():
     res, a = st.session_state.result, st.session_state.a
     if res["decision"] == "OUT_OF_POLICY":
-        st.error("Sorry, we cannot take this application.")
-        st.write(res["reason"] + " This is a policy rule, not a model result.")
+        st.error("### Loan rejected")
+        st.write(res["reason"] + " We stopped here, so there are no more questions. This is a fixed policy rule, not a model result.")
+        c1, c2 = st.columns(2)
+        c1.button("I typed the wrong age", on_click=reenter_age, width="stretch")
+        c2.button("Start over", on_click=reset, width="stretch")
         return
     if res["decision"] == "APPROVED":
         st.success("### Approved")
         st.caption("Screening result from our model. The final offer follows document verification.")
         st.write(wording.rephrase(explain(res, a)))
         st.markdown("**Next steps.** Please bring: a photo ID, address proof, two passport photos, "
-                    f"and {DOCS[a['employment']]}.")
+                    f"and {DOCS.get(a.get('employment'), 'the income documents for your type of work (our staff will tell you which)')}.")
     else:
         st.error("### Declined")
         st.caption("Screening result from our model. Please see the options below.")
         st.write(wording.rephrase(explain(res, a)))
-        facts = predict.explain_factors(a)
+        facts = [] if res.get("early") else predict.explain_factors(a)
         if facts:
             st.markdown("**What pushed the score up** (compared with a typical applicant): " + "; ".join(
                 f"{lab.lower() if i else lab} (about {d * 100:.0f} points of risk)" for i, (lab, d) in enumerate(facts)) + ".")
-        lower = predict.suggest_lower_loan(a)
+        lower = predict.suggest_lower_loan_partial(a) if res.get("early") else predict.suggest_lower_loan(a)
         if lower:
             st.markdown(f"**You can try a smaller loan.** A loan of about **{inr(lower)}** "
                         f"({100 * lower / a['price']:.0f}% of the price) is likely to be approved. "
@@ -316,9 +353,14 @@ def render_result():
         st.markdown("You can also ask our staff about adding a co-applicant. Their details would be reviewed separately.")
     render_phone()
     with st.expander("How this result was made"):
-        st.write(f"Estimated decline risk: **{res['probability']:.1%}**. We decline when it is **{res['threshold']:.1%}** or more. "
-                 f"The result comes from a statistical model trained on past loan decisions, checked in {res['latency_ms']:.0f} ms. "
-                 "It is a screening result, not a final offer.")
+        if res.get("early"):
+            st.write(f"We stopped early. Over every plausible answer to the questions we did not ask, the decline risk stays between "
+                     f"**{res['lo']:.1%}** and **{res['hi']:.1%}**, and we decline when it is **{res['threshold']:.1%}** or more, "
+                     "so more answers could not change the result.")
+        else:
+            st.write(f"Estimated decline risk: **{res['probability']:.1%}**. We decline when it is **{res['threshold']:.1%}** or more. "
+                     f"The result comes from a statistical model trained on past loan decisions, checked in {res['latency_ms']:.0f} ms. "
+                     "It is a screening result, not a final offer.")
     st.button("Start over", on_click=reset)
 
 
@@ -437,7 +479,7 @@ elif step == "veh":
                 st.session_state.a.update(make="OTHER", product="OTHER", variant="OTHER")
                 note = clean_free(free)
                 say("user", OTHER_BRAND + (f": {note}" if note else ""))
-                go("price")
+                decide_or_go("emp")
                 st.rerun()
         else:
             choice = st.selectbox("Model", sorted(labels) + [NOT_LISTED], index=None, placeholder="Choose a model, or type to search")
@@ -451,7 +493,7 @@ elif step == "veh":
                         v = labels[choice]
                         st.session_state.a.update(make=v["make"], product=v["product"], variant=v["variant"])
                     say("user", f"TVS: {choice}")
-                    go("price")
+                    decide_or_go("emp")
                     st.rerun()
 elif step == "emp":
     with st.chat_message("assistant"):

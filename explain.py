@@ -57,7 +57,8 @@ def render():
     with tabs[0]:
         st.subheader("What this app does")
         st.write("ABC Credit wants to answer one question fast: **should this two-wheeler loan be approved?** "
-                 "The app asks 7 short questions, turns the answers into numbers, and gives them to a trained model. "
+                 "The app asks up to 7 short questions, turns the answers into numbers, and gives them to a trained model. "
+                 "It asks for age first: if the age is outside 18 to 60, the loan is rejected on the spot and the chat stops, so nobody wastes time. "
                  "The model returns a **risk score** (the chance that a similar past application was declined). "
                  "If the score is at or above a cut-off, the answer is *Decline*. Otherwise it is *Approve*.")
         st.graphviz_chart(DOT, width="stretch")
@@ -106,13 +107,17 @@ def render():
             st.caption("Drop in ROC-AUC on the hold-out set when the group is scrambled. Longer bar = more important.")
         st.markdown(
             "| Question | What it gives the model |\n|---|---|\n"
-            "| 1 Pincode | Area tier and the region's past decline rate |\n"
-            "| 2 Vehicle | Brand and model (we read the product type and variant from the model) |\n"
-            "| 3 Price and loan amount | Loan share of price (LTV), loan size, down payment |\n"
-            "| 4 Employment type | Salaried, self-employed, student, pensioner, and so on |\n"
-            "| 5 Monthly income | Income and loan-to-income ratio (skipped for students and non-earning members) |\n"
-            "| 6 Age | Age, plus the 18 to 60 policy rule |\n"
+            "| 1 Age | Age, and the 18 to 60 policy rule. Outside the range the loan is rejected at once and the chat ends |\n"
+            "| 2 Price and loan amount | Loan share of price (LTV), loan size, down payment. LTV is the strongest signal |\n"
+            "| 3 Pincode | Area tier and the region's past decline rate. The second strongest signal |\n"
+            "| 4 Vehicle | Brand and model (we read the product type and variant from the model) |\n"
+            "| 5 Employment type | Salaried, self-employed, student, pensioner, and so on |\n"
+            "| 6 Monthly income | Income and loan-to-income ratio (skipped for students and non-earning members) |\n"
             "| 7 Active loan | Whether the person already has a loan |")
+        st.info("**The question list adapts.** The most informative questions come first. After each answer the app asks the model: "
+                "*could any answer to the questions still to come change the decision?* If the answer is no, the chat stops there and gives the result. "
+                "For example, a loan of 80% of the price or less is approved after four questions, and a very risky loan can be declined "
+                "before the last question. Students and non-earning members skip the income question, and an age outside 18 to 60 stops the chat at question 1.")
         st.write("**Left out on purpose:** gender, qualification and residence type. Adding any of them changed the score by less than "
                  "0.002 AUC, which is noise, and gender is a sensitive field. ID is only a label and is never used.")
         st.write("**Honest note:** LTV is the strongest signal by far, then pincode. Income and employment add very little on their own. "
@@ -243,7 +248,7 @@ def render():
             "**Consent first.** The chat starts by asking for consent. If the person says no, the session ends and no answers are kept. "
             "Name and phone are optional and are not used by the model.\n\n"
             "**Before any language model** (none is used today), text is scrubbed of long digit runs and emails.\n\n"
-            "**Tested.** 344 automated checks confirm that a typed name, phone number and full pincode never reach the database.\n\n"
+            "**Tested.** 361 automated checks confirm that a typed name, phone number and full pincode never reach the database.\n\n"
             "**Example of a stored session** (made-up values):")
         st.dataframe(pd.DataFrame([
             ["intro", "assistant", "Before we start: I use your answers only to check this loan..."],

@@ -124,7 +124,8 @@ def render():
             "**1. Split.** We keep a random 20% of applications (21,681) locked away as a **hold-out test**. The model never sees them while learning. "
             "The split keeps the same 5% decline mix in both parts.\n\n"
             "**2. Prepare.** Inside one pipeline: fill blanks, turn categories into columns of 0 and 1, and replace each pincode "
-            "prefix by its past decline rate (smoothed, and computed in a way that cannot leak the answer).\n\n"
+            "prefix by its past decline rate. This is binning: 14,000 pincodes are too many values, so we group them by their first 2 and 3 digits. "
+            "The decline rate is worked out only from the training rows in each round, so it cannot leak the answer.\n\n"
             "**3. Learn.** A *gradient boosting* model builds many small decision trees one after another. Each new tree fixes the "
             "mistakes of the earlier ones. The result is a **risk score from 0 to 1**.\n\n"
             "**4. Check.** We compare models with 5-fold cross-validation (train on 4 parts, test on the 5th, rotate). "
@@ -135,8 +136,8 @@ def render():
                 "We also tested a class-balanced version (last row below). It did not beat the plain model on PR-AUC (0.167 against 0.171), so we kept the simpler one.")
         comp = _csv("model_comparison.csv")
         if len(comp):
-            st.dataframe(comp.rename(columns={"secs": "seconds"}), hide_index=True, width="stretch")
-            st.caption("Out-of-fold scores on the training part. Higher ROC-AUC and PR-AUC are better; lower Brier and LogLoss are better.")
+            st.dataframe(comp.rename(columns={"secs": "seconds"}).drop(columns=["Brier"], errors="ignore"), hide_index=True, width="stretch")
+            st.caption("Out-of-fold scores on the training part. Higher ROC-AUC and PR-AUC are better; lower LogLoss is better.")
         st.write("**Why this model?** It scores best or tied-best, trains in seconds, scores one applicant in about 5 milliseconds, "
                  "needs no special system libraries, and its scores are well calibrated (a score of 10% really means about 10% declined).")
         _img("15_calibration_holdout.png", "Calibration on the hold-out set: predicted risk against what really happened.")
@@ -262,43 +263,35 @@ def render():
         st.caption(f"Model: {meta['model']}. Saved {meta['saved_at']}. Trained on {meta['train_rows']:,} rows. Random seed {meta['random_state']}.")
 
     with tabs[9]:
-        st.subheader("Extra checks: more models, bias, fairness")
+        st.subheader("More checks: other models, overfitting, fairness")
         st.caption("These checks do not change the model. They test whether our choices hold up. Same data, same 5-fold method, fixed random seed.")
         st.markdown("**1. Is the data skewed? (why we fill blanks with the median)**")
         sk = _csv("extras_skewness.csv")
         if len(sk):
             st.dataframe(sk, hide_index=True, width="stretch")
             st.caption("A long tail pulls the mean away from the median. For skewed fields the median is the safer fill-in value.")
-        st.markdown("**2. Do any fields repeat each other? (multicollinearity)**")
-        vf = _csv("extras_vif.csv")
-        if len(vf):
-            st.dataframe(vf, hide_index=True, width="stretch")
-            st.caption("VIF above 10 means a field is mostly explained by the others. Down payment is exactly vehicle value minus loan, so it adds nothing "
-                       "for a linear model. Tree models are not hurt by this, which is one reason we chose one.")
-        st.markdown("**3. Are the differences real? (hypothesis tests)**")
-        stt = _csv("extras_stat_tests.csv")
-        if len(stt):
-            st.dataframe(stt, hide_index=True, width="stretch")
-            st.caption("A tiny p-value says the gap between declined and approved applicants is not chance. The effect size says how big it is: "
-                       "for chi-square rows it is Cramer's V (0 = none, 1 = perfect). For Mann-Whitney rows it is the chance that a declined "
-                       "applicant has the higher value (0.5 = no difference).")
-        st.markdown("**4. Seven models on one yardstick**")
+        st.markdown("**2. Do any fields repeat each other?**")
+        st.write("Yes. Down payment is exactly vehicle value minus the loan, and LTV is the loan divided by the vehicle value, so these four fields "
+                 "overlap. A linear model such as logistic regression can be confused by overlapping fields. Tree models are not, which is one reason "
+                 "we chose one.")
+        st.markdown("**3. Other models on the same yardstick**")
         mc = _csv("extras_model_comparison.csv")
         if len(mc):
-            st.dataframe(mc, hide_index=True, width="stretch")
+            st.dataframe(mc.drop(columns=["Brier"], errors="ignore"), hide_index=True, width="stretch")
             _img("16_model_comparison.png", "PR-AUC for each model. The dashed line is a random guess.")
-            st.caption("L1 (Lasso) and L2 (Ridge) are regularized logistic regressions: a penalty shrinks weak inputs. "
-                       "L1 can set them to exactly zero. The last column asks: if each model declined the riskiest 19%, how many risky applicants would it catch?")
+            st.caption("Logistic regression with L2 (Ridge) or L1 (Lasso) adds a penalty that shrinks weak inputs. L1 can set them to exactly zero. "
+                       "The last column asks: if each model declined the riskiest 19%, how many risky applicants would it catch? "
+                       "Random forest and gradient boosting are tied within the fold-to-fold noise, so we keep gradient boosting.")
         lt = _csv("extras_lasso_top.csv")
         if len(lt):
             st.markdown("**What Lasso kept (strongest inputs)**")
             st.dataframe(lt, hide_index=True, width="stretch")
-        st.markdown("**5. Underfitting and overfitting (bias and variance)**")
+        st.markdown("**4. Underfitting and overfitting (bias and variance)**")
         td = _csv("extras_tree_depth.csv")
         if len(td):
             st.dataframe(td, hide_index=True, width="stretch")
         _img("17_bias_variance.png", "Left: a very deep tree memorises the training rows (big gap). Right: more rows narrow the gap for gradient boosting.")
-        st.markdown("**6. Fairness check on the hold-out set**")
+        st.markdown("**5. Fairness check on the hold-out set**")
         fa = _csv("extras_fairness.csv")
         if len(fa):
             _img("18_fairness.png", "Decline rate by gender and age band, history against the model.")

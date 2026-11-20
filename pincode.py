@@ -29,6 +29,8 @@ def place(pin: str) -> str:
 
 def extract(raw: str):
     """Pull a 6-digit pincode out of what a person typed: "560001", "560 001", "Delhi, 110095". None if there is not exactly one."""
+    if raw.strip().startswith(("-", "+")):  # a signed number such as -560001 is not a pincode
+        return None
     digits = re.sub(r"[^0-9]", "", raw)
     if len(digits) == 6:
         return digits

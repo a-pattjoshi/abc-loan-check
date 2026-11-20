@@ -294,7 +294,9 @@ def handle_choice(step, value, label):
 def explain(res, a):
     """Plain facts about the application. Not the decision, just context from our history."""
     ltv = res["features"]["LTV"]
-    pts = [f"Your loan covers **{ltv:.0f}%** of the vehicle price."]
+    ltv_shown = int(ltv * 10) / 10 if ltv < 100 else ltv  # round down, so 99.998% never shows as 100%
+    ltv_txt = f"{ltv_shown:.0f}" if ltv_shown == int(ltv_shown) else f"{ltv_shown:.1f}"
+    pts = [f"Your loan covers **{ltv_txt}%** of the vehicle price."]
     if ltv > 90:
         pts.append("Loans above 90% of the price were declined more often in our past data.")
     if not a.get("active_loan", True) and ltv > 90:

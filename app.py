@@ -391,9 +391,11 @@ def render_upload():
     else:
         data = None
     if data is None:
-        st.info("Columns the model reads: Pincode, Make_Code, Product_Code, Model_Variant, LTV, Loan_Amount, Employment_Type, "
-                "Net_salary, Age, PAST_LOANS_ACTIVE. Extra columns are ignored. Missing ones are filled with typical values and flagged. "
-                "LTV must be a percentage (80, not 0.8).")
+        st.info("The model reads: Age, Pincode, vehicle (Make_Code, Product_Code, Model_Variant), LTV and Loan_Amount, Employment_Type, Net_salary, "
+                "PAST_LOANS_ACTIVE. Friendly headers are understood too: Income (monthly or annual, it checks), Cost of vehicle, Loan Required, Make, Model, "
+                "Occupation, Existing loan. LTV is worked out from the cost and loan when it is missing. Extra columns such as CIBIL score or ITR fields are "
+                "ignored with a warning. Anything missing is filled with a typical value and reported, so the result is less reliable. "
+                "Read every warning shown after the upload.")
         return
     try:
         res, info = score_upload(data)
@@ -405,20 +407,22 @@ def render_upload():
         return
     for w in info["warnings"]:
         st.warning(w)
-    n_dec = int((res["Decision"] == "DECLINED").sum())
+    n_app = int((res["Final_Decision"] == "APPROVED").sum())
+    n_dec = int((res["Final_Decision"] == "DECLINED").sum())
+    n_rej = int((res["Final_Decision"] == "REJECTED (age policy)").sum())
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Rows", f"{info['rows']:,}")
-    c2.metric("Approved", f"{info['rows'] - n_dec:,}")
+    c2.metric("Approved", f"{n_app:,}")
     c3.metric("Declined", f"{n_dec:,}")
-    c4.metric("Age outside 18 to 60", f"{info['policy_age_flagged']:,}")
-    st.caption(f"Declined share {info['declined_share']:.1%}. Threshold {info['threshold']:.3f}. "
-               "Rows with age outside 18 to 60 are flagged in policy_age_ok; the label comes from the model.")
+    c4.metric("Rejected (age policy)", f"{n_rej:,}")
+    st.caption(f"Threshold {info['threshold']:.3f}. Final_Decision applies the age rule first (outside 18 to 60 means REJECTED, as in the chat); "
+               "everyone else gets the model's APPROVED or DECLINED. The Decision column is the model's own label for every row.")
     if "roc_auc" in info:
         st.success(f"The file has labels ({info['labelled_rows']:,} rows). ROC-AUC {info['roc_auc']}, PR-AUC {info['pr_auc']}, "
                    f"recall on DECLINED {info['recall_declined']:.1%}.")
     cols = st.radio("Columns in the download", ["Decision and probability", "Decision only", "Probability only"], horizontal=True)
-    keep = {"Decision and probability": ["ID", "Decision", "P_DECLINED"], "Decision only": ["ID", "Decision"],
-            "Probability only": ["ID", "P_DECLINED"]}[cols] + ["policy_age_ok"]
+    keep = {"Decision and probability": ["ID", "Final_Decision", "Decision", "P_DECLINED", "policy_age_ok"], "Decision only": ["ID", "Decision", "Final_Decision"],
+            "Probability only": ["ID", "P_DECLINED"]}[cols]
     out = res[keep]
     st.dataframe(out.head(50), width="stretch", hide_index=True)
     if len(out) > 50:

@@ -1,0 +1,13 @@
+Sr. No.,Name,Age,PAN Number,Pincode,CIBIL Score,Occupation,Monthly Income,Existing loan,Make,Model,Cost of vehicle,Loan Required,Scenario,Test focus,Expected result in file mode,Expected in the chat
+1,Test 1,17,ABCDE1000F,560001,850,Salaried,40000,No,TVS,TVS JUPITER BSVI - AOL,100000,60000,Age 17: under the minimum age,Age rule,REJECTED (age policy),Rejected at Question 1 (age). No more questions.
+2,Test 2,61,ABCDE1001F,560001,850,Salaried,40000,No,TVS,TVS JUPITER BSVI - AOL,100000,60000,Age 61: just over the maximum age,Age rule,REJECTED (age policy),Rejected at Question 1 (age). No more questions.
+3,Test 3,80,ABCDE1002F,110001,850,Pensioner,30000,No,TVS,TVS JUPITER BSVI - AOL,100000,60000,Age 80: far over the maximum age,Age rule,REJECTED (age policy),Rejected at Question 1 (age). No more questions.
+4,Test 4,18,ABCDE1003F,560001,780,Salaried,25000,No,TVS,TVS JUPITER BSVI - AOL,100000,60000,"Age 18: youngest allowed, safe loan",Safe loan,APPROVED,Approved after 4 of 7 questions (stopped early)
+5,Test 5,60,ABCDE1004F,110001,780,Salaried,40000,No,TVS,TVS JUPITER BSVI - AOL,100000,60000,"Age 60: oldest allowed, safe loan",Safe loan,APPROVED,Approved after 4 of 7 questions (stopped early)
+6,Test 6,35,ABCDE1005F,110001,820,Salaried,60000,No,TVS,TVS APACHE RTR 160 4V BSVI DISC,150000,90000,"Safe: 60% loan, big city, salaried",Safe loan,APPROVED,Approved after 4 of 7 questions (stopped early)
+7,Test 7,30,ABCDE1006F,560001,700,Salaried,25000,No,TVS,TVS JUPITER BSVI - AOL,100000,88000,"Borderline: 88% loan, Bengaluru",Close to the cut-off,DECLINED,Declined after 7 of 7 questions
+8,Test 8,25,ABCDE1007F,834001,640,Agriculture,15000,No,TVS,TVS JUPITER BSVI - AOL,100000,100000,"Risky: 100% loan, rural area, farming income",High LTV,DECLINED,Declined after 5 of 7 questions (stopped early)
+9,Test 9,28,ABCDE1008F,560001,610,Self-employed,20000,No,TVS,TVS JUPITER BSVI - AOL,100000,95000,"Risky: 95% loan, self-employed, no loan history",High LTV,DECLINED,Declined after 7 of 7 questions
+10,Test 10,22,ABCDE1009F,400001,720,Student,0,No,TVS,TVS JUPITER BSVI - AOL,100000,80000,"Student: income not needed, 80% loan",Student skips income,APPROVED,Approved after 4 of 7 questions (stopped early)
+11,Test 11,33,ABCDE1010F,110001,790,Salaried,35000,No,Bajaj,Pulsar 150,120000,70000,Unlisted brand (Bajaj): scored with a typical vehicle,Unseen vehicle,APPROVED,Approved after 4 of 7 questions (stopped early)
+12,Test 12,40,ABCDE1011F,560001,760,Salaried,"25,000",No,TVS,TVS JUPITER BSVI - AOL,100000,"Rs. 70,000",Messy numbers: commas and Rs in income and loan,Number cleaning,APPROVED,Approved after 4 of 7 questions (stopped early)

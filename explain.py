@@ -52,7 +52,7 @@ def render():
     st.caption("A plain-English guide for anyone new to the project. No coding knowledge needed. "
                "Every number on this page comes from our own training run and hold-out test.")
     tabs = st.tabs(["1 Big picture", "2 Data and cleaning", "3 Fields we ask", "4 The model", "5 Approve or decline",
-                    "6 Results", "7 Try the model", "8 Privacy and logging", "9 Limits", "10 Extra checks"])
+                    "6 Results", "7 Try the model", "8 Privacy and logging", "9 Limits", "10 More checks"])
 
     with tabs[0]:
         st.subheader("What this app does")
@@ -185,6 +185,12 @@ def render():
         st.write("**Reading these numbers fairly.** Accuracy looks lower than the approve-everyone 94.75% because we deliberately "
                  "decline about 19% of applications to catch more than half of the risky ones. Precision is low because declines are rare "
                  "in the first place. This is a screening tool: a decline means *look more closely*, not *this person will default*.")
+        st.markdown("**How fast is it? (our values of X and Y)**")
+        e1, e2, e3, e4 = st.columns(4)
+        e1.metric("Model scoring (median)", "5.4 ms", help="95th percentile 7.1 ms, over 100 scripted sessions.")
+        e2.metric("Decision screen (median)", "27 ms", help="95th percentile 40 ms.")
+        e3.metric("Click to decision, live app", "about 1.0 s", help="Our target Y is 2 seconds.")
+        e4.metric("Time to finish the chat", "1 min 47 s", help="Average of three classmates (85, 105 and 130 seconds). Our target X is 2.5 minutes.")
         _img("02_decline_by_ltv.png", "The strongest pattern in the data: the larger the loan share of the price, the more often it was declined.")
 
     with tabs[6]:
@@ -224,11 +230,11 @@ def render():
             "**What we log** (SQLite file, one row per session and one per message): time, consent choice, every question and the "
             "applicant's answer (masked), the feature values given to the model, the risk score, the cut-off, the decision, "
             "model version and response time.\n\n"
-            "**What we never store:** the full pincode, an exact income in any readable answer, a name, a phone number, or any "
+            "**What we never store:** the full pincode, an exact income, a name, a phone number, or any "
             "free text that failed validation.")
         st.table(pd.DataFrame([
             ["Pincode 560001", "560*** (first 3 digits)", "The model only needs the area, so the full code is dropped"],
-            ["Income 25,000", "income band 20k-30k", "Answers show bands. The exact value stays only inside the saved feature record, to replay a score"],
+            ["Income 25,000", "income band 20k-30k", "The exact figure is never stored. Even the saved feature record keeps only the band, so a score can be replayed only approximately"],
             ["Name 'Asha Rao'", "[name provided] + salted hash", "The hash is SHA-256 with a secret salt. It cannot be turned back into the name"],
             ["Phone 98765 43210", "[phone provided] + salted hash", "Same method. Only a 10-digit mobile number is accepted"],
             ["Typed junk or a phone number in the pincode box", "[invalid input, 10 chars]", "Wrong inputs are never saved as typed"],
@@ -236,7 +242,8 @@ def render():
         st.markdown(
             "**Consent first.** The chat starts by asking for consent. If the person says no, the session ends and no answers are kept. "
             "Name and phone are optional and are not used by the model.\n\n"
-            "**Before any language model** (switched off today), text is scrubbed of long digit runs and emails.\n\n"
+            "**Before any language model** (none is used today), text is scrubbed of long digit runs and emails.\n\n"
+            "**Tested.** 326 automated checks confirm that a typed name, phone number and full pincode never reach the database.\n\n"
             "**Example of a stored session** (made-up values):")
         st.dataframe(pd.DataFrame([
             ["intro", "assistant", "Before we start: I use your answers only to check this loan..."],

@@ -1,19 +1,20 @@
-"""Parse typed rupee amounts: 95000, 95,000, Rs 95000, 80k, 1.2 lakh, 2 lac, 0.5 crore."""
+"""Read typed rupee amounts. Numbers only: 95000, 95,000, 9,50,000, 95000.50, optionally with a leading Rs, INR or the rupee sign.
+
+Commas and spaces are removed. Letters ("80k", "1.2 lakh", "abc"), signs, exponents ("1e5") and anything else are refused.
+"""
 import math
 import re
 
-_MULT = {"k": 1e3, "l": 1e5, "lac": 1e5, "lacs": 1e5, "lakh": 1e5, "lakhs": 1e5, "cr": 1e7, "crore": 1e7, "crores": 1e7}
-_SUFFIX = re.compile(r"(\d+(?:\.\d+)?)(k|lakhs?|lacs?|l|crores?|cr)")
+_PLAIN = re.compile(r"[0-9][0-9,\s]*(\.[0-9]{1,2})?")
 
 
 def parse_amount(text: str):
-    """Return a float, or None if the text is not an amount."""
-    t = re.sub(r"[₹,\s]|rs\.?|inr", "", str(text).lower())
-    m = _SUFFIX.fullmatch(t)
-    if m:
-        return float(m.group(1)) * _MULT[m.group(2)]
-    try:
-        v = float(t)
-    except ValueError:
+    """Return a float, or None if the text is not a plain number."""
+    t = str(text).strip()
+    if not t or len(t) > 20:
         return None
-    return v if math.isfinite(v) else None  # "nan" and "inf" are not amounts
+    t = re.sub(r"(?i)^(₹|rs\.?|inr)\s*", "", t)
+    if not _PLAIN.fullmatch(t):
+        return None
+    v = float(re.sub(r"[,\s]", "", t))
+    return v if math.isfinite(v) else None

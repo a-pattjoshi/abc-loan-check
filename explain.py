@@ -107,7 +107,7 @@ def render():
         st.markdown(
             "| Question | What it gives the model |\n|---|---|\n"
             "| 1 Pincode | Area tier and the region's past decline rate |\n"
-            "| 2 Vehicle | Make, product type and variant |\n"
+            "| 2 Vehicle | Brand and model (we read the product type and variant from the model) |\n"
             "| 3 Price and loan amount | Loan share of price (LTV), loan size, down payment |\n"
             "| 4 Employment type | Salaried, self-employed, student, pensioner, and so on |\n"
             "| 5 Monthly income | Income and loan-to-income ratio (skipped for students and non-earning members) |\n"
@@ -243,7 +243,7 @@ def render():
             "**Consent first.** The chat starts by asking for consent. If the person says no, the session ends and no answers are kept. "
             "Name and phone are optional and are not used by the model.\n\n"
             "**Before any language model** (none is used today), text is scrubbed of long digit runs and emails.\n\n"
-            "**Tested.** 326 automated checks confirm that a typed name, phone number and full pincode never reach the database.\n\n"
+            "**Tested.** 344 automated checks confirm that a typed name, phone number and full pincode never reach the database.\n\n"
             "**Example of a stored session** (made-up values):")
         st.dataframe(pd.DataFrame([
             ["intro", "assistant", "Before we start: I use your answers only to check this loan..."],

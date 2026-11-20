@@ -7,6 +7,7 @@ runs first. The optional wording layer (wording.py) only rephrases the explanati
 import math
 import re
 import sys
+import time
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -26,6 +27,18 @@ import wording  # noqa: E402
 st.set_page_config(page_title="ABC Credit loan check", page_icon="🛵", layout="centered")
 st.markdown("<style>#MainMenu{visibility:hidden}footer{visibility:hidden}[data-testid='stToolbar']{display:none}"
             "[data-testid='stAppDeployButton']{display:none}[data-testid='stDecoration']{display:none}</style>", unsafe_allow_html=True)
+
+
+def clean_free(txt: str) -> str:
+    """Optional brand and model text for an unlisted vehicle: letters, digits and a few signs only, no long digit runs."""
+    t = " ".join(re.sub(r"[^A-Za-z0-9 .&'/\-]", "", txt or "").split())[:60]
+    return "" if re.search(r"[0-9]{7,}", t.replace(" ", "")) else t
+
+
+def scroll_to_bottom():
+    """Keep the newest question in view. Streamlit otherwise jumps back to the top after menu steps."""
+    st.html(f"<script>/* {time.time_ns()} */ const go=()=>{{const m=document.querySelector('[data-testid=\"stMain\"]')||document.querySelector('section.main'); "
+            "if(m){m.scrollTo({top:m.scrollHeight});}}; go(); setTimeout(go,150); setTimeout(go,500);</script>", unsafe_allow_javascript=True)
 
 
 def inr(x) -> str:
@@ -49,11 +62,11 @@ CONSENT_TEXT = ("Before we start: I use your answers only to check this loan and
 QUESTIONS = {
     "name": "First, what should I call you? This is optional and it does not affect your result, so feel free to skip.",
     "pin": "**Question 1 of 7.** Great. Please share the pincode of the area you live in (6 digits).",
-    "veh": "**Question 2 of 7.** Nice. Which two-wheeler are you planning to buy? Pick the range (for example Apache or Jupiter), then the variant. If yours is not on the list, choose \"My vehicle is not listed\".",
-    "price": "**Question 3 of 7.** What is the on-road price of the vehicle (the final price you pay, in rupees)?",
+    "veh": "**Question 2 of 7.** Nice. Which two-wheeler are you planning to buy? Pick the brand, then the model. If yours is not on the list, choose \"Other brand\" or \"My model is not listed\".",
+    "price": "**Question 3 of 7.** What is the on-road price of the vehicle (the final price you pay, in rupees)? Please type numbers only.",
     "loan": "Still question 3. How much of that would you like to borrow, in rupees?",
     "emp": "**Question 4 of 7.** Tell me a little about your work. What is your employment type?",
-    "inc": "**Question 5 of 7.** What is your monthly income, in rupees? A rough figure is fine.",
+    "inc": "**Question 5 of 7.** What is your monthly income, in rupees? A rough figure is fine. Please type numbers only.",
     "age": "**Question 6 of 7.** Almost there. What is your age in years?",
     "act": "**Question 7 of 7.** Last one. Do you have any loan running right now?",
 }
@@ -187,20 +200,21 @@ def _handle_text(step, raw):
                 say("assistant", f"Noted. This price is outside the range our model learned from ({inr(tlo)} to {inr(thi)}), "
                                  "so please treat the result as less certain.")
             return go("loan")
-        err = f"Hmm, that does not look like a vehicle price. Could you enter it as a number between {inr(lo)} and {inr(hi)}?"
+        err = f"Please type numbers only, between {inr(lo)} and {inr(hi)} (for example 95000 or 95,000)."
     elif step == "loan":
         if num is not None and C.MIN_LOAN <= num <= a["price"]:
             a["loan"] = float(num)
             return go("emp")
-        err = f"Could you enter a loan amount from {inr(C.MIN_LOAN)} up to the vehicle price ({inr(a['price'])})?"
+        err = f"Please type numbers only, from {inr(C.MIN_LOAN)} up to the vehicle price ({inr(a['price'])})."
     elif step == "inc":
         if num is not None and 1000 <= num <= C.INCOME_MAX:
             a["income"] = float(num)
             return go("age")
-        err = f"Could you enter your monthly income as a number between {inr(1000)} and {inr(C.INCOME_MAX)}?"
+        err = f"Please type numbers only, between {inr(1000)} and {inr(C.INCOME_MAX)} (for example 25000)."
     elif step == "age":
-        if num is not None and math.isfinite(num) and num == int(num) and 1 <= num <= 120:
-            a["age"] = int(num)
+        t = raw.strip()
+        if re.fullmatch(r"[0-9]{1,3}", t) and 1 <= int(t) <= 120:
+            a["age"] = int(t)
             reason = predict.policy_gate(a["age"])
             if reason:
                 st.session_state.step = "policy"
@@ -208,7 +222,7 @@ def _handle_text(step, raw):
                 logger.finish_session(st.session_state.sid, st.session_state.result, status="out_of_policy")
                 return
             return go("act")
-        err = "Could you enter your age as a whole number of years?"
+        err = "Please type your age as a whole number of years, digits only (for example 32)."
     say("assistant", err)
 
 
@@ -407,42 +421,47 @@ elif step in TEXT_STEPS:
             if st.button("Skip"):
                 handle_choice("name", None, "Skip")
                 st.rerun()
-    raw = st.chat_input(TEXT_STEPS[step])
+    raw = st.chat_input(TEXT_STEPS[step], max_chars=60)
     if raw:
         handle_text(step, raw)
         st.rerun()
 elif step == "veh":
-    NOT_LISTED = "My vehicle is not listed"
+    NOT_LISTED, OTHER_BRAND = "My model is not listed", "Other brand"
+    labels = {(v["desc"] if v["desc"].upper().startswith("TVS ") else "TVS " + v["desc"]): v for v in lk["vehicles"]}
     with st.chat_message("assistant"):
-        makes = sorted({v["make"] for v in lk["vehicles"] if v["make"] != "MISSING"})
-        make = st.selectbox("Vehicle range", makes + ["OTHER"], format_func=lambda m: NOT_LISTED if m == "OTHER" else C.MAKE_LABELS.get(m, m.title()))
-        if make == "OTHER":
+        brand = st.selectbox("Brand", ["TVS", OTHER_BRAND])
+        if brand == OTHER_BRAND:
             free = st.text_input("Optional: type the brand and model", max_chars=60, help="For your reference only. It does not change the result.")
             st.caption("The model has not seen this vehicle, so it will lean on the price, loan, income and area instead.")
             if st.button("Confirm vehicle"):
                 st.session_state.a.update(make="OTHER", product="OTHER", variant="OTHER")
-                say("user", f"{NOT_LISTED}" + (f": {' '.join(free.split())}" if free.strip() else ""))
+                note = clean_free(free)
+                say("user", OTHER_BRAND + (f": {note}" if note else ""))
                 go("price")
                 st.rerun()
         else:
-            models = sorted(v["desc"] for v in lk["vehicles"] if v["make"] == make) + [NOT_LISTED]
-            desc = st.selectbox("Variant", models)
+            choice = st.selectbox("Model", sorted(labels) + [NOT_LISTED], index=None, placeholder="Choose a model, or type to search")
             if st.button("Confirm vehicle"):
-                if desc == NOT_LISTED:
-                    prod = next(v["product"] for v in lk["vehicles"] if v["make"] == make)
-                    st.session_state.a.update(make=make, product=prod, variant="OTHER")
+                if choice is None:
+                    st.warning("Please choose a model first.")
                 else:
-                    v = next(v for v in lk["vehicles"] if v["desc"] == desc)
-                    st.session_state.a.update(make=v["make"], product=v["product"], variant=v["variant"])
-                say("user", f"{C.MAKE_LABELS.get(make, make.title())}: {desc}")
-                go("price")
-                st.rerun()
+                    if choice == NOT_LISTED:
+                        st.session_state.a.update(make="OTHER", product="OTHER", variant="OTHER")
+                    else:
+                        v = labels[choice]
+                        st.session_state.a.update(make=v["make"], product=v["product"], variant=v["variant"])
+                    say("user", f"TVS: {choice}")
+                    go("price")
+                    st.rerun()
 elif step == "emp":
     with st.chat_message("assistant"):
-        code = st.selectbox("Employment type", list(C.EMPLOYMENT_LABELS), format_func=C.EMPLOYMENT_LABELS.get)
+        code = st.selectbox("Employment type", list(C.EMPLOYMENT_LABELS), format_func=C.EMPLOYMENT_LABELS.get, index=None, placeholder="Choose your employment type")
         if st.button("Confirm"):
-            handle_choice("emp", code, C.EMPLOYMENT_LABELS[code])
-            st.rerun()
+            if code is None:
+                st.warning("Please choose your employment type first.")
+            else:
+                handle_choice("emp", code, C.EMPLOYMENT_LABELS[code])
+                st.rerun()
 elif step == "act":
     with st.chat_message("assistant"):
         c1, c2 = st.columns(2)
@@ -460,6 +479,8 @@ elif step in ("done", "policy"):
 
 if can_go_back():
     st.button("← Back to the previous question", on_click=go_back)
+
+scroll_to_bottom()
 
 st.divider()
 st.caption("Results come from a trained prediction model checked against a fixed rule for age (18 to 60). "

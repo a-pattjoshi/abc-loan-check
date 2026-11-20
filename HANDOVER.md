@@ -3,7 +3,7 @@
 ## Links
 - Live app: https://pgai-group11-loan-approval.streamlit.app/
 - Code (app and model): https://github.com/a-pattjoshi/abc-loan-check
-- Short report: reports/Group11_Loan_Approval_Report_v6.pdf (also in the GitHub repo)
+- Short report: reports/Group11_Loan_Approval_Report_v7.pdf (also in the GitHub repo)
 
 ## What the app does
 Three modes in the sidebar: **Loan check** (consent, optional name, 7 questions, Approve or Decline, next steps), **Score a file** (upload a CSV, or use the built-in sample file, and download predictions), **How it works** (plain-English guide with a live what-if tool).
@@ -16,7 +16,7 @@ The decision comes only from the trained model (risk score against a threshold o
 | 2 Trained model with reproducible code | notebooks/02_features_model.ipynb, notebooks/03_model_threshold.ipynb, src/train.py, models/model.joblib (seed 42) |
 | 3 Chatbot with PII masking | src/app.py, src/predict.py, src/logger.py, src/explain.py |
 | 4 Predictions on the held-out test set | `python src/predict.py <file.csv> --out predictions.csv` or the Score a file mode. Format still to confirm with the professor |
-| 5 Short report | reports/Group11_Loan_Approval_Report_v6.pdf (HTML source alongside) |
+| 5 Short report | reports/Group11_Loan_Approval_Report_v7.pdf (HTML source alongside) |
 | Self-assessment against section 10 | reports/evaluation_vs_brief.md |
 | Decisions made along the way | reports/decision_log.md (D1 to D25) |
 | Numbers behind the report | reports/report_numbers.md, reports/figures/ |

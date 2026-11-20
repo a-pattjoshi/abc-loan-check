@@ -1,4 +1,4 @@
-"""ABC Credit two-wheeler loan check: 7 questions, one decision.
+"""ABC Credit two-wheeler loan check: a few questions, one decision.
 
 Run:  .venv/bin/streamlit run src/app.py
 The decision comes only from the trained model (predict.score). The age rule is a policy gate that
@@ -61,14 +61,14 @@ CONSENT_TEXT = ("Before we start: I use your answers only to check this loan and
 
 QUESTIONS = {
     "name": "First, what should I call you? This is optional and it does not affect your result, so feel free to skip.",
-    "age": "**Question 1 of 7.** Let's start with the quick one. How old are you, in years? (We lend to applicants aged 18 to 60.)",
-    "pin": "**Question 3 of 7.** Please share the pincode of the area you live in (6 digits).",
-    "veh": "**Question 4 of 7.** Nice. Which two-wheeler are you planning to buy? Pick the brand, then the model. If yours is not on the list, choose \"Other brand\" or \"My model is not listed\".",
-    "price": "**Question 2 of 7.** Great. What is the on-road price of the vehicle (the final price you pay, in rupees)? Please type numbers only.",
-    "loan": "Still question 2. How much of that would you like to borrow, in rupees?",
-    "emp": "**Question 5 of 7.** Tell me a little about your work. What is your employment type?",
-    "inc": "**Question 6 of 7.** What is your monthly income, in rupees? A rough figure is fine. Please type numbers only.",
-    "act": "**Question 7 of 7.** Last one. Do you have any loan running right now?",
+    "age": "Let's start with the quick one. How old are you, in years? (We lend to applicants aged 18 to 60.)",
+    "pin": "Please share the pincode of the area you live in (6 digits).",
+    "veh": "Nice. Which two-wheeler are you planning to buy? Pick the brand, then the model. If yours is not on the list, choose \"Other brand\" or \"My model is not listed\".",
+    "price": "Great. What is the on-road price of the vehicle (the final price you pay, in rupees)? Please type numbers only.",
+    "loan": "Next, how much of that would you like to borrow, in rupees? (We do not lend 100% of the price.)",
+    "emp": "Tell me a little about your work. What is your employment type?",
+    "inc": "What is your monthly income, in rupees? A rough figure is fine. Please type numbers only.",
+    "act": "Last one. Do you have any loan running right now?",
 }
 TEXT_STEPS = {"name": "Your name (optional)", "pin": "e.g. 560001", "price": "e.g. 95000", "loan": "e.g. 70000", "inc": "e.g. 25000", "age": "e.g. 32"}
 
@@ -100,8 +100,8 @@ def reset():
     st.session_state.phone_saved = False
     st.session_state.a = {}
     st.session_state.hist = []
-    st.session_state.msgs = [("assistant", "Hi, welcome to ABC Credit! 👋 I will ask you 7 quick questions "
-                                           "(about 2 to 3 minutes) and then tell you how likely your two-wheeler loan is to be approved."),
+    st.session_state.msgs = [("assistant", "Hi, welcome to ABC Credit! 👋 I will ask you a few quick questions "
+                                           "(usually 2 to 3 minutes, sometimes fewer) and then tell you how likely your two-wheeler loan is to be approved."),
                              ("assistant", CONSENT_TEXT)]
     st.session_state.result = None
     for _, t in st.session_state.msgs:
@@ -171,16 +171,16 @@ def finish_early(b):
     logger.finish_session(st.session_state.sid, st.session_state.result, status="finished_early")
 
 
-def reenter_age():
-    """After an age rejection, let the applicant correct a typing mistake without starting over."""
+def reenter_answer():
+    """After a policy rejection, let the applicant correct a typing mistake (the age or the loan amount) without starting over."""
     h = st.session_state.hist
-    if h and h[-1][0] == "age":
-        _, n, a = h.pop()
+    if h and h[-1][0] in ("age", "loan"):
+        step, n, a = h.pop()
         st.session_state.msgs = st.session_state.msgs[:n]
         st.session_state.a = a
         st.session_state.result = None
-        logger.log_turn(st.session_state.sid, "age", "user", "[re-entered age]")
-        go("age")
+        logger.log_turn(st.session_state.sid, step, "user", f"[re-entered {step}]")
+        go(step)
 
 
 def finish():
@@ -238,6 +238,13 @@ def _handle_text(step, raw):
     elif step == "loan":
         if num is not None and C.MIN_LOAN <= num <= a["price"]:
             a["loan"] = float(num)
+            reason = predict.policy_gate_ltv(a["price"], a["loan"])
+            if reason:   # hard rule, like the age rule: reject up front and stop asking
+                st.session_state.step = "policy"
+                st.session_state.result = {"decision": "OUT_OF_POLICY", "kind": "loan",
+                                           "reason": f"You asked for {inr(a['loan'])} on a vehicle priced at {inr(a['price'])}. {reason}"}
+                logger.finish_session(st.session_state.sid, st.session_state.result, status="out_of_policy")
+                return
             return go("pin")
         err = f"Please type numbers only, from {inr(C.MIN_LOAN)} up to the vehicle price ({inr(a['price'])})."
     elif step == "inc":
@@ -252,7 +259,7 @@ def _handle_text(step, raw):
             reason = predict.policy_gate(a["age"])
             if reason:
                 st.session_state.step = "policy"
-                st.session_state.result = {"decision": "OUT_OF_POLICY", "reason": f"You entered age {a['age']}. {reason}"}
+                st.session_state.result = {"decision": "OUT_OF_POLICY", "kind": "age", "reason": f"You entered age {a['age']}. {reason}"}
                 logger.finish_session(st.session_state.sid, st.session_state.result, status="out_of_policy")
                 return
             return go("price")
@@ -325,7 +332,7 @@ def render_result():
         st.error("### Loan rejected")
         st.write(res["reason"] + " We stopped here, so there are no more questions. This is a fixed policy rule, not a model result.")
         c1, c2 = st.columns(2)
-        c1.button("I typed the wrong age", on_click=reenter_age, width="stretch")
+        c1.button("I typed the wrong age" if res.get("kind", "age") == "age" else "Change the loan amount", on_click=reenter_answer, width="stretch")
         c2.button("Start over", on_click=reset, width="stretch")
         return
     if res["decision"] == "APPROVED":
@@ -407,21 +414,22 @@ def render_upload():
         return
     for w in info["warnings"]:
         st.warning(w)
-    n_app = int((res["Final_Decision"] == "APPROVED").sum())
-    n_dec = int((res["Final_Decision"] == "DECLINED").sum())
-    n_rej = int((res["Final_Decision"] == "REJECTED (age policy)").sum())
+    n_app = int((res["Decision"] == "APPROVED").sum())
+    n_rej = int(info["policy_rejected"])
+    n_dec = int((res["Decision"] == "DECLINED").sum()) - n_rej
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Rows", f"{info['rows']:,}")
     c2.metric("Approved", f"{n_app:,}")
     c3.metric("Declined", f"{n_dec:,}")
-    c4.metric("Rejected (age policy)", f"{n_rej:,}")
-    st.caption(f"Threshold {info['threshold']:.3f}. Final_Decision applies the age rule first (outside 18 to 60 means REJECTED, as in the chat); "
-               "everyone else gets the model's APPROVED or DECLINED. The Decision column is the model's own label for every row.")
+    c4.metric("Rejected by policy rule", f"{n_rej:,}")
+    st.caption(f"Threshold {info['threshold']:.3f}. Two fixed policy rules come first and cannot be overruled: age outside 18 to 60, and a loan of 100% or more of the "
+               "vehicle price. Those rows are DECLINED with the reason shown. Every other row gets the model's APPROVED or DECLINED. "
+               "Model_Decision shows what the model alone would say.")
     if "roc_auc" in info:
         st.success(f"The file has labels ({info['labelled_rows']:,} rows). ROC-AUC {info['roc_auc']}, PR-AUC {info['pr_auc']}, "
                    f"recall on DECLINED {info['recall_declined']:.1%}.")
     cols = st.radio("Columns in the download", ["Decision and probability", "Decision only", "Probability only"], horizontal=True)
-    keep = {"Decision and probability": ["ID", "Final_Decision", "Decision", "P_DECLINED", "policy_age_ok"], "Decision only": ["ID", "Decision", "Final_Decision"],
+    keep = {"Decision and probability": ["ID", "Decision", "Reason", "P_DECLINED", "Model_Decision", "policy_age_ok"], "Decision only": ["ID", "Decision", "Reason"],
             "Probability only": ["ID", "P_DECLINED"]}[cols]
     out = res[keep]
     st.dataframe(out.head(50), width="stretch", hide_index=True)
@@ -443,7 +451,7 @@ if "step" not in st.session_state:
     reset()
 
 st.title("🛵 ABC Credit loan check")
-st.caption("Two-wheeler loans. 7 questions, one answer.")
+st.caption("Two-wheeler loans. A few questions, one answer.")
 
 for role, text in st.session_state.msgs:
     with st.chat_message(role):

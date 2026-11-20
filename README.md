@@ -1,7 +1,7 @@
 # ABC Credit two-wheeler loan check (PGAI Group 11)
 
 Streamlit app with three modes:
-- **Loan check**: consent, optional name, 7 questions, then Approve or Decline from a trained model, with next steps.
+- **Loan check**: consent, optional name, a few adaptive questions (up to 7), then Approve or Decline from a trained model, with next steps.
 - **Score a file**: upload a CSV in the training-file layout (a sample file can be downloaded in the app) and download the predictions.
 - **How it works**: a plain-English guide to the data, the model, the threshold, the privacy rules, and a live what-if tool.
 

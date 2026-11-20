@@ -36,7 +36,7 @@ DOT = """
 digraph G {
   rankdir=LR; node [shape=box, style="rounded,filled", fillcolor="#f3f4f6", fontname="Helvetica", fontsize=11];
   A [label="Applicant answers\\n7 short questions"];
-  B [label="Policy check\\nage 18 to 60"];
+  B [label="Policy rules\\nage 18 to 60, LTV < 100%"];
   C [label="Feature builder\\nLTV, loan, tier, ..."];
   D [label="Trained model\\nrisk of decline (0 to 1)", fillcolor="#fde7c8"];
   E [label="Threshold\\nrisk >= 0.089 ?", fillcolor="#fde7c8"];
@@ -58,14 +58,14 @@ def render():
         st.subheader("What this app does")
         st.write("ABC Credit wants to answer one question fast: **should this two-wheeler loan be approved?** "
                  "The app asks up to 7 short questions, turns the answers into numbers, and gives them to a trained model. "
-                 "It asks for age first: if the age is outside 18 to 60, the loan is rejected on the spot and the chat stops, so nobody wastes time. "
+                 "It asks for age first: if the age is outside 18 to 60, the loan is rejected on the spot and the chat stops, so nobody wastes time. A loan of 100% or more of the vehicle price is also rejected at once. "
                  "The model returns a **risk score** (the chance that a similar past application was declined). "
                  "If the score is at or above a cut-off, the answer is *Decline*. Otherwise it is *Approve*.")
         st.graphviz_chart(DOT, width="stretch")
         st.markdown(
             "**Two rules keep this safe and fair to audit.**\n"
             "1. **Only the model decides.** No language model and no hand-written rule changes the approve or decline result. "
-            "The one exception is a policy rule: applicants must be 18 to 60, and that check runs before the model.\n"
+            "The exceptions are two policy rules that run before the model: applicants must be 18 to 60, and the loan must be less than 100% of the vehicle price.\n"
             "2. **Predicting and talking are separate.** An optional text helper could reword explanations, but it is switched off "
             "and never sees the score or makes a decision.")
         st.info("Where did the model learn from? From **108,423 past loan applications**, each marked APPROVED or DECLINED.")
@@ -108,7 +108,7 @@ def render():
         st.markdown(
             "| Question | What it gives the model |\n|---|---|\n"
             "| 1 Age | Age, and the 18 to 60 policy rule. Outside the range the loan is rejected at once and the chat ends |\n"
-            "| 2 Price and loan amount | Loan share of price (LTV), loan size, down payment. LTV is the strongest signal |\n"
+            "| 2 Price and loan amount | Loan share of price (LTV), loan size, down payment. LTV is the strongest signal. A loan of 100% of the price or more is rejected at once |\n"
             "| 3 Pincode | Area tier and the region's past decline rate. The second strongest signal |\n"
             "| 4 Vehicle | Brand and model (we read the product type and variant from the model) |\n"
             "| 5 Employment type | Salaried, self-employed, student, pensioner, and so on |\n"
@@ -117,7 +117,7 @@ def render():
         st.info("**The question list adapts.** The most informative questions come first. After each answer the app asks the model: "
                 "*could any answer to the questions still to come change the decision?* If the answer is no, the chat stops there and gives the result. "
                 "For example, a loan of 80% of the price or less is approved after four questions, and a very risky loan can be declined "
-                "before the last question. Students and non-earning members skip the income question, and an age outside 18 to 60 stops the chat at question 1.")
+                "before the last question. Students and non-earning members skip the income question, and an age outside 18 to 60 stops the chat at question 1 and a loan equal to the price stops it at question 2.")
         st.write("**Left out on purpose:** gender, qualification and residence type. Adding any of them changed the score by less than "
                  "0.002 AUC, which is noise, and gender is a sensitive field. ID is only a label and is never used.")
         st.write("**Honest note:** LTV is the strongest signal by far, then pincode. Income and employment add very little on their own. "
@@ -248,7 +248,7 @@ def render():
             "**Consent first.** The chat starts by asking for consent. If the person says no, the session ends and no answers are kept. "
             "Name and phone are optional and are not used by the model.\n\n"
             "**Before any language model** (none is used today), text is scrubbed of long digit runs and emails.\n\n"
-            "**Tested.** 361 automated checks confirm that a typed name, phone number and full pincode never reach the database.\n\n"
+            "**Tested.** 396 automated checks confirm that a typed name, phone number and full pincode never reach the database.\n\n"
             "**Example of a stored session** (made-up values):")
         st.dataframe(pd.DataFrame([
             ["intro", "assistant", "Before we start: I use your answers only to check this loan..."],

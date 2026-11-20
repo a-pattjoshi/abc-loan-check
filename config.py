@@ -16,6 +16,7 @@ POSITIVE = "DECLINED"
 
 SALARY_CAP = 100_000  # p99.5 of Net_salary on the full file (issue 6)
 POLICY_AGE = (18, 60)
+POLICY_MAX_LTV = 100.0  # hard rule: a loan of 100% or more of the vehicle price is rejected up front (no applicant in the data had LTV above 99.6)
 
 # Always-on flags from cleaning (not part of the ablation)
 ALWAYS_NUM = ["missing_any"]

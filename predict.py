@@ -56,6 +56,13 @@ def policy_gate(age: int):
     return None
 
 
+def policy_gate_ltv(price: float, loan: float):
+    """Return None if allowed, else the reason text. A loan of 100% or more of the vehicle price is rejected up front."""
+    if loan >= price * C.POLICY_MAX_LTV / 100.0:
+        return "We do not lend 100% of the vehicle price. A down payment is required."
+    return None
+
+
 def derive_tier(pincode: str):
     """(tier, note). Unknown pincodes fall back to the 3-digit area, then to MISSING."""
     lk = _load()[2]
@@ -389,13 +396,25 @@ def score_frame(raw: pd.DataFrame, threshold=None):
     if ids_num.notna().all() and (ids_num % 1 == 0).all():
         ids = ids_num.astype("Int64")
     res = pd.DataFrame({"ID": ids.to_numpy()})
-    res["Decision"] = pd.Series(p >= thr).map({True: C.POSITIVE, False: "APPROVED"}).to_numpy()
-    res["P_DECLINED"] = p.round(6)
+    model_label = pd.Series(p >= thr).map({True: C.POSITIVE, False: "APPROVED"}).to_numpy()
     age = prep["Age"]
-    res["policy_age_ok"] = (age.between(*C.POLICY_AGE) | age.isna()).to_numpy()
-    res["Final_Decision"] = np.where(res["policy_age_ok"], res["Decision"], "REJECTED (age policy)")   # the chatbot rejects these at question 1
-    info["declined_share"] = float((p >= thr).mean())
-    info["policy_age_flagged"] = int((~res["policy_age_ok"]).sum())
+    age_ok = (age.between(*C.POLICY_AGE) | age.isna()).to_numpy()
+    ltv_bad = (prep["LTV"] >= C.POLICY_MAX_LTV).fillna(False).to_numpy()
+    reason = np.where(~age_ok & ltv_bad, f"Age outside {C.POLICY_AGE[0]} to {C.POLICY_AGE[1]}; loan is 100% or more of the vehicle price",
+             np.where(~age_ok, f"Age outside {C.POLICY_AGE[0]} to {C.POLICY_AGE[1]}",
+             np.where(ltv_bad, "Loan is 100% or more of the vehicle price", "")))
+    rejected = reason != ""
+    res = pd.DataFrame({"ID": ids.to_numpy()})
+    # Policy rules come first and are not negotiable: a policy-rejected row is DECLINED whatever the model says (as in the chatbot).
+    res["Decision"] = np.where(rejected, C.POSITIVE, model_label)
+    res["P_DECLINED"] = p.round(6)
+    res["Reason"] = np.where(rejected, "Policy rule: " + reason, "Model")
+    res["Model_Decision"] = model_label
+    res["policy_age_ok"] = age_ok
+    final_pos = (res["Decision"] == C.POSITIVE).to_numpy()
+    info["declined_share"] = float(final_pos.mean())
+    info["policy_age_flagged"] = int((~age_ok).sum())
+    info["policy_rejected"] = int(rejected.sum())
     if C.TARGET in raw.columns:
         lab = raw[C.TARGET].astype("string").str.strip().str.upper()
         known = lab.isin([C.POSITIVE, "APPROVED"]).fillna(False).to_numpy(dtype=bool)
@@ -403,7 +422,7 @@ def score_frame(raw: pd.DataFrame, threshold=None):
         if known.sum() and len(set(y[known])) == 2:
             from sklearn.metrics import average_precision_score, recall_score, roc_auc_score
             info.update(roc_auc=round(roc_auc_score(y[known], p[known]), 4), pr_auc=round(average_precision_score(y[known], p[known]), 4),
-                        recall_declined=round(recall_score(y[known], (p >= thr)[known]), 4), labelled_rows=int(known.sum()))
+                        recall_declined=round(recall_score(y[known], final_pos[known]), 4), labelled_rows=int(known.sum()))
     return res, info
 
 
@@ -414,7 +433,8 @@ def predict_file(inp, out, fmt="both", threshold=None):
     the policy_age_ok column but does not change the label (D18).
     """
     res, info = score_frame(read_any_csv(inp), threshold)
-    cols = ["ID"] + (["Decision"] if fmt in ("label", "both") else []) + (["P_DECLINED"] if fmt in ("prob", "both") else []) + ["policy_age_ok", "Final_Decision"]
+    cols = (["ID", "Decision", "Reason", "policy_age_ok"] if fmt == "label" else ["ID", "P_DECLINED"] if fmt == "prob"
+            else ["ID", "Decision", "P_DECLINED", "Reason", "Model_Decision", "policy_age_ok"])
     res[cols].to_csv(out, index=False)
     return info
 

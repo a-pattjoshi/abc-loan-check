@@ -49,8 +49,6 @@ digraph G {
 
 def render():
     st.title("🛵 How this loan checker works")
-    st.caption("A plain-English guide for anyone new to the project. No coding knowledge needed. "
-               "Every number on this page comes from our own training run and hold-out test.")
     tabs = st.tabs(["1 Big picture", "2 Data and cleaning", "3 Fields we ask", "4 The model", "5 Approve or decline",
                     "6 Results", "7 Try the model", "8 Privacy and logging", "9 Limits", "10 More checks"])
 
